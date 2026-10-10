@@ -1,0 +1,28 @@
+﻿# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/
+venv/
+
+# Secrets and local config
+.env
+.env.*
+!.env.example
+
+# Uploads and sample binaries
+*.apk
+uploads/
+tmp/
+
+# Node and frontend builds
+node_modules/
+dist/
+build/
+*.log
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
