@@ -1,0 +1,23 @@
+{
+  "schemaVersion": "1.0",
+  "reportId": "report:empty-001",
+  "generatedAt": "2026-10-10T12:00:00Z",
+  "app": {
+    "name": "No Findings App",
+    "packageName": "org.example.empty",
+    "version": "1.0.0",
+    "minSdk": null,
+    "targetSdk": null,
+    "permissions": [],
+    "components": []
+  },
+  "score": {
+    "value": 0,
+    "label": "No findings",
+    "severity": "low",
+    "breakdown": []
+  },
+  "findings": [],
+  "capabilityChains": [],
+  "claims": []
+}

@@ -1,0 +1,22 @@
+{
+  "schemaVersion": "1.0",
+  "reportId": "report:partial-001",
+  "generatedAt": "2026-10-10T12:00:00Z",
+  "app": {
+    "name": "Partial App",
+    "packageName": "org.example.partial",
+    "version": "1.0.0",
+    "minSdk": null,
+    "targetSdk": null,
+    "permissions": [],
+    "components": []
+  },
+  "score": {
+    "value": 0,
+    "label": "Incomplete",
+    "severity": "low",
+    "breakdown": []
+  },
+  "findings": [],
+  "capabilityChains": []
+}

@@ -1,0 +1,10 @@
+{
+  "schemaVersion": "2.0",
+  "reportId": "not valid id",
+  "app": {},
+  "score": {
+    "value": 140,
+    "severity": "unknown"
+  },
+  "findings": "not an array"
+}

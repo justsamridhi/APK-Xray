@@ -1,0 +1,408 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://apk-xray.dev/schema/report-1.0.json",
+  "title": "APK-Xray report",
+  "description": "Version 1.0 contract for evidence-first static APK analysis reports.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "schemaVersion",
+    "reportId",
+    "generatedAt",
+    "app",
+    "score",
+    "findings",
+    "capabilityChains",
+    "claims"
+  ],
+  "properties": {
+    "schemaVersion": {
+      "const": "1.0"
+    },
+    "reportId": {
+      "$ref": "#/$defs/stableId"
+    },
+    "generatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "app": {
+      "$ref": "#/$defs/app"
+    },
+    "score": {
+      "$ref": "#/$defs/score"
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/finding"
+      }
+    },
+    "capabilityChains": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/capabilityChain"
+      }
+    },
+    "claims": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/claim"
+      }
+    }
+  },
+  "$defs": {
+    "stableId": {
+      "type": "string",
+      "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$"
+    },
+    "nullableInteger": {
+      "anyOf": [
+        {
+          "type": "integer",
+          "minimum": 0
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "app": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "packageName",
+        "version",
+        "minSdk",
+        "targetSdk",
+        "permissions",
+        "components"
+      ],
+      "properties": {
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "packageName": {
+          "type": "string",
+          "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$"
+        },
+        "version": {
+          "type": "string",
+          "minLength": 1
+        },
+        "minSdk": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "targetSdk": {
+          "$ref": "#/$defs/nullableInteger"
+        },
+        "permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
+        "components": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/component"
+          }
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "type",
+        "name",
+        "exported"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "type": {
+          "enum": [
+            "activity",
+            "service",
+            "receiver",
+            "provider",
+            "unknown"
+          ]
+        },
+        "name": {
+          "type": "string",
+          "minLength": 1
+        },
+        "exported": {
+          "type": "boolean"
+        },
+        "permission": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "score": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "value",
+        "label",
+        "severity",
+        "breakdown"
+      ],
+      "properties": {
+        "value": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "moderate",
+            "high",
+            "very-high"
+          ]
+        },
+        "breakdown": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/scoreContribution"
+          }
+        }
+      }
+    },
+    "scoreContribution": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId",
+        "points"
+      ],
+      "properties": {
+        "ruleId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "points": {
+          "type": "number",
+          "minimum": 0
+        }
+      }
+    },
+    "finding": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "ruleId",
+        "severity",
+        "title",
+        "summary",
+        "evidence",
+        "claimStatus",
+        "points",
+        "explanations"
+      ],
+      "properties": {
+        "ruleId": {
+          "$ref": "#/$defs/stableId"
+        },
+        "severity": {
+          "enum": [
+            "low",
+            "medium",
+            "high"
+          ]
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidence": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/evidence"
+          }
+        },
+        "claimStatus": {
+          "enum": [
+            "verified",
+            "removed",
+            "unsupported",
+            "unavailable"
+          ]
+        },
+        "points": {
+          "type": [
+            "number",
+            "null"
+          ],
+          "minimum": 0
+        },
+        "explanations": {
+          "$ref": "#/$defs/explanations"
+        }
+      }
+    },
+    "evidence": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "availability"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "snippet": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "availability": {
+          "enum": [
+            "available",
+            "unavailable"
+          ]
+        }
+      }
+    },
+    "explanations": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "en",
+        "hi"
+      ],
+      "properties": {
+        "en": {
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "hi": {
+          "type": [
+            "string",
+            "null"
+          ]
+        }
+      }
+    },
+    "capabilityChain": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "steps"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "steps": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/capabilityStep"
+          }
+        }
+      }
+    },
+    "capabilityStep": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "label",
+        "evidenceIds"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "label": {
+          "type": "string",
+          "minLength": 1
+        },
+        "evidenceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        }
+      }
+    },
+    "claim": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "id",
+        "text",
+        "classification",
+        "evidenceIds",
+        "status"
+      ],
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/stableId"
+        },
+        "text": {
+          "type": "string",
+          "minLength": 1
+        },
+        "classification": {
+          "enum": [
+            "Can",
+            "Could",
+            "Cannot Prove"
+          ]
+        },
+        "evidenceIds": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {
+            "$ref": "#/$defs/stableId"
+          }
+        },
+        "status": {
+          "enum": [
+            "verified",
+            "removed",
+            "unsupported",
+            "unavailable"
+          ]
+        }
+      }
+    }
+  }
+}

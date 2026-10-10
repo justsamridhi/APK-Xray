@@ -1,2 +1,3 @@
 # Validation-only dependency; this is not a production runtime requirement.
 androguard>=4.0,<5
+jsonschema>=4.23,<5
