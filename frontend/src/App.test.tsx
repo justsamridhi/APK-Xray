@@ -56,11 +56,20 @@ describe('application routes', () => {
     const user = userEvent.setup()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
       app: { name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
-      score: { value: 48, label: 'Moderate' },
-      findings: [{ ruleId: 'RULE-1', severity: 'medium', title: 'Exported component', summary: 'Review this component.', claimStatus: 'verified', evidence: [{ id: 'E-1', label: 'AndroidManifest.xml', snippet: 'exported=true' }] }],
+      score: { value: 48, label: 'Backend-calculated moderate exposure', severity: 'moderate' },
+      findings: [{ ruleId: 'RULE-1', severity: 'medium', title: 'Exported component', summary: 'Review this component.', points: 12, claimStatus: 'verified', explanations: { en: 'The component is exported.', hi: 'घटक एक्सपोर्ट किया गया है।' }, evidence: [{ id: 'E-1', label: 'AndroidManifest.xml', snippet: 'exported=true' }] }],
+      capabilityChains: [{ id: 'C1', label: 'Export path', steps: [{ id: 'step-1', label: 'Manifest component', evidenceId: 'E-1' }] }],
     }), { status: 200 })))
     render(<App />)
     expect(await screen.findByRole('heading', { name: 'Test App' })).toBeInTheDocument()
+    expect(screen.getByText('12 points')).toBeInTheDocument()
+    expect(screen.getByText('MODERATE')).toBeInTheDocument()
+    expect(screen.getByText('The component is exported.')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'हिन्दी' }))
+    expect(screen.getByText('घटक एक्सपोर्ट किया गया है।')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: /Manifest component/ }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('E-1')
+    await user.click(screen.getByRole('button', { name: 'Close evidence' }))
     await user.click(screen.getByRole('button', { name: 'View evidence' }))
     expect(screen.getByRole('dialog')).toHaveTextContent('E-1')
     expect(screen.getByRole('dialog')).toHaveTextContent('exported=true')

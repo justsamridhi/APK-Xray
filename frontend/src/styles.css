@@ -111,6 +111,18 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-
 .report-summary .page-title { margin-bottom: .5rem; }
 .report-score { display: grid; justify-items: end; gap: .35rem; min-width: 10rem; padding: 1rem 1.25rem; background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; }
 .report-score strong { font: 600 40px/48px 'Space Grotesk', sans-serif; }
+.report-score .score-label { color: var(--muted); font-size: 12px; text-align: right; }
+.breakdown-card { overflow-x: auto; }
+.breakdown-table { width: 100%; border-collapse: collapse; font-size: 14px; }
+.breakdown-table th, .breakdown-table td { padding: .75rem; border-bottom: 1px solid var(--border); text-align: left; }
+.breakdown-table th { font-weight: 600; }
+.breakdown-table td { color: var(--muted); text-align: right; }
+.explanation { padding: .75rem; color: var(--text-secondary) !important; background: var(--surface-muted); border-radius: .6rem; }
+.chain-list { display: grid; gap: 1rem; }
+.chain-card h3 { margin: 0 0 1rem; font: 600 18px/24px 'Space Grotesk', sans-serif; }
+.chain-step { display: inline-flex; flex-direction: column; gap: .2rem; padding: .65rem .8rem; color: var(--text); background: var(--lavender-soft); border: 0; border-radius: .6rem; cursor: pointer; font: 500 12px/18px 'JetBrains Mono', monospace; }
+.chain-step:disabled { cursor: not-allowed; opacity: .55; }
+.chain-step small { color: var(--muted); font-size: 10px; }
 .footer { display: flex; justify-content: space-between; gap: 1rem; padding: 0 0 1rem; }
 .dashboard-intro { padding: 1rem 0 1.5rem; }
 .dashboard-intro .page-title { max-width: 42rem; margin-bottom: .75rem; }
