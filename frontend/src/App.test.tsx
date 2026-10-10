@@ -77,6 +77,26 @@ describe('application routes', () => {
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
+  it('traps focus and restores it in the production evidence drawer', async () => {
+    window.history.replaceState({}, '', '/report')
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      app: { name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
+      score: { value: 20, label: 'Low', severity: 'low' },
+      findings: [{ ruleId: 'RULE-1', severity: 'low', title: 'Finding', summary: 'Summary', evidence: [], claimStatus: 'unavailable' }],
+    }), { status: 200 })))
+    render(<App />)
+    await screen.findByRole('heading', { name: 'Test App' })
+    const trigger = screen.getByRole('button', { name: 'View evidence' })
+    await user.click(trigger)
+    const close = screen.getByRole('button', { name: 'Close evidence' })
+    expect(close).toHaveFocus()
+    await user.tab()
+    expect(close).toHaveFocus()
+    await user.keyboard('{Escape}')
+    expect(trigger).toHaveFocus()
+  })
+
   it('shows an error for malformed report responses', async () => {
     window.history.replaceState({}, '', '/report')
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{broken', { status: 200 })))

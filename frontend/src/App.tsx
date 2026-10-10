@@ -120,12 +120,12 @@ function AnalyzePage() {
         <Icon name="upload" size={32} />
         <strong>{file ? file.name : 'Select or drop an Android APK file'}</strong>
         <span>{file ? `${formatFileSize(file.size)} · Ready to upload` : 'APK files only · Maximum size 50 MB'}</span>
-        <SecondaryButton type="button" onClick={(event) => { event.stopPropagation(); fileInputRef.current?.click() }} disabled={state === 'uploading'}>Choose APK</SecondaryButton>
       </div>
       {error && <p className="upload-error" role="alert"><Icon name="alert" />{error}</p>}
       {file && !error && <p className="upload-success" role="status"><Icon name="shieldCheck" />File validated and ready for static analysis.</p>}
       {state === 'uploading' && <LoadingSpinner label="Uploading APK for static analysis…" />}
       <div className="upload-actions">
+        <SecondaryButton type="button" onClick={() => fileInputRef.current?.click()} disabled={state === 'uploading'}>Choose APK</SecondaryButton>
         <PrimaryButton type="button" onClick={uploadFile} disabled={!file || state === 'uploading'}>{state === 'uploading' ? 'Uploading…' : 'Start analysis'}</PrimaryButton>
         <span className="demo-note">NO APK IS EXECUTED.</span>
       </div>
@@ -141,13 +141,36 @@ function findingTone(severity: ReportFinding['severity']) {
 
 function ReportEvidenceDrawer({ finding, onClose }: { finding: ReportFinding; onClose: () => void }) {
   const drawerRef = useRef<HTMLElement>(null)
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null)
   useEffect(() => {
-    drawerRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
+    const drawer = drawerRef.current
+    const getFocusable = () => drawer ? Array.from(drawer.querySelectorAll<HTMLElement>('button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])')).filter((element) => !element.hasAttribute('disabled')) : []
+    getFocusable()[0]?.focus()
     const onKeyDown = (event: globalThis.KeyboardEvent) => {
-      if (event.key === 'Escape') onClose()
+      if (event.key === 'Escape') {
+        event.preventDefault()
+        onClose()
+        return
+      }
+      if (event.key !== 'Tab') return
+      const focusable = getFocusable()
+      if (focusable.length === 0) return
+      const first = focusable[0]
+      const last = focusable[focusable.length - 1]
+      if (event.shiftKey && document.activeElement === first) {
+        event.preventDefault()
+        last.focus()
+      } else if (!event.shiftKey && document.activeElement === last) {
+        event.preventDefault()
+        first.focus()
+      }
     }
     document.addEventListener('keydown', onKeyDown)
-    return () => document.removeEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('keydown', onKeyDown)
+      previouslyFocusedRef.current?.focus()
+    }
   }, [onClose])
   return <div className="evidence-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <aside ref={drawerRef} className="evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="evidence-heading">

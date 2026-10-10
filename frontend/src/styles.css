@@ -57,9 +57,10 @@
 }
 * { box-sizing: border-box; }
 html, body, #root { min-width: 320px; min-height: 100%; }
+html { overflow-x: hidden; }
 body { margin: 0; color: var(--text); background: var(--background); transition: background-color .15s, color .15s; }
 button, input { font: inherit; }
-button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-offset: 3px; }
+button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
 .application-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); min-height: 100vh; }
 .sidebar { display: flex; flex-direction: column; gap: 2rem; padding: 1.5rem 1rem; background: var(--surface); border-right: 1px solid var(--border); }
 .sidebar-brand, .mobile-brand { display: inline-flex; align-items: center; gap: .65rem; color: var(--text); text-decoration: none; white-space: nowrap; }
@@ -105,7 +106,7 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-
 .upload-error .icon, .upload-success .icon { width: 18px; height: 18px; }
 .upload-actions { display: flex; align-items: center; flex-wrap: wrap; gap: .75rem; }
 .text-link, .text-button { color: var(--text); font-weight: 600; text-decoration: underline; text-underline-offset: .2em; }
-.text-button { align-self: flex-start; padding: 0; background: transparent; border: 0; cursor: pointer; }
+.text-button { align-self: flex-start; padding: .15rem .1rem; background: transparent; border: 0; cursor: pointer; }
 .report-placeholder { min-height: 18rem; display: grid; place-items: center; text-align: center; }
 .report-summary { display: flex; align-items: flex-start; justify-content: space-between; gap: 2rem; padding: 1rem 0; }
 .report-summary .page-title { margin-bottom: .5rem; }
@@ -117,12 +118,14 @@ button:focus-visible, a:focus-visible { outline: 2px solid var(--text); outline-
 .breakdown-table th, .breakdown-table td { padding: .75rem; border-bottom: 1px solid var(--border); text-align: left; }
 .breakdown-table th { font-weight: 600; }
 .breakdown-table td { color: var(--muted); text-align: right; }
+.breakdown-table th:first-child { overflow-wrap: anywhere; }
 .explanation { padding: .75rem; color: var(--text-secondary) !important; background: var(--surface-muted); border-radius: .6rem; }
 .chain-list { display: grid; gap: 1rem; }
 .chain-card h3 { margin: 0 0 1rem; font: 600 18px/24px 'Space Grotesk', sans-serif; }
 .chain-step { display: inline-flex; flex-direction: column; gap: .2rem; padding: .65rem .8rem; color: var(--text); background: var(--lavender-soft); border: 0; border-radius: .6rem; cursor: pointer; font: 500 12px/18px 'JetBrains Mono', monospace; }
 .chain-step:disabled { cursor: not-allowed; opacity: .55; }
 .chain-step small { color: var(--muted); font-size: 10px; }
+.chain-step:focus-visible, .text-button:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
 .footer { display: flex; justify-content: space-between; gap: 1rem; padding: 0 0 1rem; }
 .dashboard-intro { padding: 1rem 0 1.5rem; }
 .dashboard-intro .page-title { max-width: 42rem; margin-bottom: .75rem; }
