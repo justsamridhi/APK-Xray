@@ -3,6 +3,15 @@ import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
+const reportContract = {
+  schemaVersion: '1.0',
+  reportId: 'report:test',
+  generatedAt: '2026-01-01T00:00:00Z',
+  app: { minSdk: 1, targetSdk: 1, permissions: [], components: [] },
+  score: { breakdown: [] },
+  claims: [],
+}
+
 describe('application routes', () => {
   afterEach(() => {
     vi.restoreAllMocks()
@@ -34,17 +43,24 @@ describe('application routes', () => {
   it('uploads a valid APK and navigates to the report', async () => {
     window.history.replaceState({}, '', '/analyze')
     const user = userEvent.setup()
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      ...reportContract,
+      app: { ...reportContract.app, name: 'Uploaded App', packageName: 'org.uploaded.app', version: '1.0.0' },
+      score: { ...reportContract.score, value: 0, label: 'Low exposure', severity: 'low' },
+      findings: [],
+      capabilityChains: [],
+    }), { status: 200 })))
     render(<App />)
     await user.upload(screen.getByLabelText('Choose APK file'), new File(['apk bytes'], 'sample.apk', { type: 'application/vnd.android.package-archive' }))
     expect(screen.getByRole('button', { name: 'Start analysis' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
-    expect(await screen.findByRole('heading', { name: 'Analysis report' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Uploaded App' })).toBeInTheDocument()
     expect(fetch).toHaveBeenCalledWith('/api/upload', expect.objectContaining({ method: 'POST' }))
   })
 
   it('renders the report placeholder', async () => {
     window.history.replaceState({}, '', '/report')
+    sessionStorage.clear()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 404 })))
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Analysis report' })).toBeInTheDocument()
@@ -55,9 +71,10 @@ describe('application routes', () => {
     window.history.replaceState({}, '', '/report')
     const user = userEvent.setup()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      app: { name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
-      score: { value: 48, label: 'Backend-calculated moderate exposure', severity: 'moderate' },
-      findings: [{ ruleId: 'RULE-1', severity: 'medium', title: 'Exported component', summary: 'Review this component.', points: 12, claimStatus: 'verified', explanations: { en: 'The component is exported.', hi: 'घटक एक्सपोर्ट किया गया है।' }, evidence: [{ id: 'E-1', label: 'AndroidManifest.xml', snippet: 'exported=true' }] }],
+      ...reportContract,
+      app: { ...reportContract.app, name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
+      score: { ...reportContract.score, value: 48, label: 'Backend-calculated moderate exposure', severity: 'moderate' },
+      findings: [{ ruleId: 'RULE-1', severity: 'medium', title: 'Exported component', summary: 'Review this component.', points: 12, claimStatus: 'verified', explanations: { en: 'The component is exported.', hi: 'घटक एक्सपोर्ट किया गया है।' }, evidence: [{ id: 'E-1', label: 'AndroidManifest.xml', snippet: 'exported=true', availability: 'available' }] }],
       capabilityChains: [{ id: 'C1', label: 'Export path', steps: [{ id: 'step-1', label: 'Manifest component', evidenceId: 'E-1' }] }],
     }), { status: 200 })))
     render(<App />)
@@ -81,9 +98,10 @@ describe('application routes', () => {
     window.history.replaceState({}, '', '/report')
     const user = userEvent.setup()
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
-      app: { name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
-      score: { value: 20, label: 'Low', severity: 'low' },
-      findings: [{ ruleId: 'RULE-1', severity: 'low', title: 'Finding', summary: 'Summary', evidence: [], claimStatus: 'unavailable' }],
+      ...reportContract,
+      app: { ...reportContract.app, name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
+      score: { ...reportContract.score, value: 20, label: 'Low', severity: 'low' },
+      findings: [{ ruleId: 'RULE-1', severity: 'low', title: 'Finding', summary: 'Summary', evidence: [], claimStatus: 'unavailable', points: null, explanations: { en: null, hi: null } }],
     }), { status: 200 })))
     render(<App />)
     await screen.findByRole('heading', { name: 'Test App' })

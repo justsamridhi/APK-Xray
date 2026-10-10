@@ -1,0 +1,5 @@
+androguard>=4.0,<5
+fastapi>=0.115,<1
+jsonschema>=4.23,<5
+python-multipart>=0.0.12,<1
+uvicorn[standard]>=0.32,<1
