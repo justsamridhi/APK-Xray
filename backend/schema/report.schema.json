@@ -81,7 +81,10 @@
       ],
       "properties": {
         "name": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1
         },
         "packageName": {
@@ -89,7 +92,10 @@
           "pattern": "^[A-Za-z][A-Za-z0-9_]*(\\.[A-Za-z][A-Za-z0-9_]*)+$"
         },
         "version": {
-          "type": "string",
+          "type": [
+            "string",
+            "null"
+          ],
           "minLength": 1
         },
         "minSdk": {
@@ -141,7 +147,10 @@
           "minLength": 1
         },
         "exported": {
-          "type": "boolean"
+          "type": [
+            "boolean",
+            "null"
+          ]
         },
         "permission": {
           "type": [
