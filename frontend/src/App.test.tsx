@@ -43,11 +43,36 @@ describe('application routes', () => {
     expect(fetch).toHaveBeenCalledWith('/api/upload', expect.objectContaining({ method: 'POST' }))
   })
 
-  it('renders the report placeholder', () => {
+  it('renders the report placeholder', async () => {
     window.history.replaceState({}, '', '/report')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 404 })))
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Analysis report' })).toBeInTheDocument()
-    expect(screen.getByText(/no report yet/i)).toBeInTheDocument()
+    expect(await screen.findByText(/no report yet/i)).toBeInTheDocument()
+  })
+
+  it('renders a fetched report and opens evidence', async () => {
+    window.history.replaceState({}, '', '/report')
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response(JSON.stringify({
+      app: { name: 'Test App', packageName: 'org.test.app', version: '1.2.3' },
+      score: { value: 48, label: 'Moderate' },
+      findings: [{ ruleId: 'RULE-1', severity: 'medium', title: 'Exported component', summary: 'Review this component.', claimStatus: 'verified', evidence: [{ id: 'E-1', label: 'AndroidManifest.xml', snippet: 'exported=true' }] }],
+    }), { status: 200 })))
+    render(<App />)
+    expect(await screen.findByRole('heading', { name: 'Test App' })).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'View evidence' }))
+    expect(screen.getByRole('dialog')).toHaveTextContent('E-1')
+    expect(screen.getByRole('dialog')).toHaveTextContent('exported=true')
+    await user.click(screen.getByRole('button', { name: 'Close evidence' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('shows an error for malformed report responses', async () => {
+    window.history.replaceState({}, '', '/report')
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{broken', { status: 200 })))
+    render(<App />)
+    expect(await screen.findByText('Report unavailable')).toBeInTheDocument()
   })
 
   it('renders the sample report separately from the real report', async () => {
