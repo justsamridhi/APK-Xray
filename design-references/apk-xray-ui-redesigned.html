@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>APK X-ray — UI Prototype</title>
+<meta name="description" content="APK X-ray static-analysis UI prototype with pastel icons and sample report states.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Manrope:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+:root{
+  --ink:#101010; --paper:#e9e9e6; --card:#f6f6f3; --line:#d4d4cf; --mute:#5f5f5b;
+  --mint:#b9e0cf; --lav:#d1c9f2; --peach:#f4d5c3; --sky:#c6def0;
+  --display:"Barlow Condensed","Arial Narrow",Impact,sans-serif;
+  --body:"Manrope",system-ui,-apple-system,"Segoe UI",sans-serif;
+}
+*{box-sizing:border-box;margin:0}
+html{background:var(--paper)}
+body{font-family:var(--body);color:var(--ink);line-height:1.55;font-size:16px;padding:20px 16px 56px}
+.wrap{max-width:980px;margin:0 auto}
+button{font:inherit;color:inherit;cursor:pointer;border:0;background:none}
+:focus-visible{outline:3px solid var(--sky);outline-offset:2px}
+
+/* nav */
+.nav{display:flex;align-items:center;justify-content:space-between;gap:12px;background:var(--ink);color:#fff;border-radius:999px;padding:6px 6px 6px 22px;margin-bottom:18px}
+.brand{font-family:var(--display);font-weight:700;font-size:22px;letter-spacing:.02em;display:flex;align-items:center;gap:10px;color:#fff;text-decoration:none}
+.brand-mark{width:30px;height:30px;object-fit:contain;display:block;flex:none}
+.ui-icon{width:18px;height:18px;object-fit:contain;vertical-align:middle;flex:none}
+.tab{display:inline-flex;align-items:center;gap:7px}
+.pipe li{display:flex;align-items:center}
+
+.tabs{display:flex;gap:4px}
+.tab{padding:9px 20px;border-radius:999px;color:#cfcfca;font-weight:500}
+.tab[aria-current="page"]{background:var(--paper);color:var(--ink)}
+.tab:hover{color:#fff}.tab[aria-current="page"]:hover{color:var(--ink)}
+
+/* hero */
+.hero{display:grid;grid-template-columns:1.1fr 1fr;gap:0;background:var(--ink);border-radius:32px;overflow:hidden}
+.hero-l{padding:44px 36px 40px;color:#fff;position:relative}
+.title{font-family:var(--display);font-weight:700;font-size:clamp(64px,13vw,120px);line-height:.88;letter-spacing:.01em}
+.tag{display:inline-block;background:var(--mint);color:var(--ink);font-weight:700;font-size:14px;padding:5px 14px;border-radius:6px;transform:rotate(-3deg);margin-top:-6px;margin-left:6px}
+.hero-r{background:var(--card);margin:14px;border-radius:24px;padding:28px}
+.hero-r h2{font-size:22px;line-height:1.25;margin-bottom:10px}
+.hero-r p{color:var(--mute);font-size:15px;max-width:44ch}
+.badge{display:inline-block;margin-top:18px;background:var(--lav);padding:6px 14px;border-radius:999px;font-size:13px;font-weight:700}
+
+/* upload */
+.upload{display:flex;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:8px;margin:18px 0}
+.drop{flex:1;padding:10px 18px;color:var(--mute);cursor:pointer;border-radius:999px;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.drop input{position:absolute;opacity:0;width:1px;height:1px}
+.drop:focus-within{outline:3px solid var(--sky)}
+.pill{padding:11px 20px;border-radius:999px;font-weight:700;white-space:nowrap}
+.pill.ghost{background:var(--paper);border:1px solid var(--line)}
+.pill.solid{background:var(--ink);color:#fff}
+.pill.solid .ui-icon{filter:grayscale(1) brightness(0) invert(1)}.pill.ghost .ui-icon{width:16px;height:16px}.pill.solid:hover{background:#2a2a2a}
+
+/* pipeline */
+.pipe{display:flex;flex-wrap:wrap;gap:8px;margin:6px 0 10px;list-style:none;padding:0;counter-reset:s}
+.pipe li{counter-increment:s;background:var(--card);border:1px solid var(--line);border-radius:999px;padding:7px 16px 7px 8px;font-size:14px;display:flex;align-items:center;gap:8px}
+.pipe li::before{content:counter(s);width:24px;height:24px;border-radius:50%;background:var(--ink);color:#fff;display:grid;place-items:center;font-size:12px;font-weight:700}
+.note{color:var(--mute);font-size:14px;margin-top:14px}
+
+/* report */
+.head{background:var(--ink);color:#fff;border-radius:32px;padding:30px 32px;display:grid;grid-template-columns:1fr auto;gap:18px 28px;align-items:start}
+.head h1{font-family:var(--display);font-size:clamp(40px,8vw,64px);line-height:.95;font-weight:700}
+.meta{color:#b9b9b4;font-size:14px;margin-top:8px;word-break:break-all}
+.score{background:var(--peach);color:var(--ink);border-radius:22px;padding:14px 20px;text-align:center;min-width:170px}
+.score b{display:block;font-family:var(--display);font-size:34px;line-height:1}
+.score span{font-size:13px}
+.bars{grid-column:1/-1;display:grid;gap:7px;margin-top:6px}
+.bar{display:grid;grid-template-columns:44px 1fr 26px;gap:10px;align-items:center;font-size:13px;color:#d6d6d1}
+.bar i{display:block;height:8px;border-radius:99px;background:var(--lav)}
+.cols{display:grid;grid-template-columns:1.25fr 1fr;gap:18px;margin-top:18px;align-items:start}
+.card{background:var(--card);border:1px solid var(--line);border-radius:26px;padding:24px}
+.card+.card{margin-top:18px}
+h3{font-size:18px;margin-bottom:4px}
+.sub{color:var(--mute);font-size:14px;margin-bottom:14px}
+.find{display:flex;align-items:center;gap:12px;width:100%;text-align:left;padding:12px 14px;border-radius:18px;border:1px solid var(--line);background:#fff;margin-top:8px}
+.find:hover{border-color:var(--ink)}
+.find[aria-pressed="true"]{border-color:var(--ink);box-shadow:inset 0 0 0 1px var(--ink)}
+.rid{font-weight:700;font-size:13px;background:var(--paper);border-radius:8px;padding:3px 8px}
+.ft{flex:1;font-size:15px}
+.sev{font-size:12px;font-weight:700;border-radius:999px;padding:4px 11px;white-space:nowrap}
+.sev.high{background:var(--peach)}.sev.mod{background:var(--lav)}
+.chain{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:6px}
+.node{background:var(--sky);border-radius:999px;padding:7px 14px;font-size:14px;font-weight:500}
+.arrow{color:var(--mute)}
+.lang{display:inline-flex;background:var(--paper);border:1px solid var(--line);border-radius:999px;padding:3px;float:right}
+.lang button{padding:5px 14px;border-radius:999px;font-size:13px;font-weight:700}
+.lang button[aria-pressed="true"]{background:var(--ink);color:#fff}
+.claim{display:flex;gap:10px;align-items:flex-start;padding:12px 0;border-top:1px solid var(--line)}
+.claim:first-of-type{border-top:0}
+.st{flex:none;font-size:12px;font-weight:700;border-radius:999px;padding:3px 10px;margin-top:2px}
+.st.ok{background:var(--mint)}.st.no{background:var(--peach)}
+.claim p{flex:1;font-size:15px}
+.claim.removed p{color:var(--mute);text-decoration:line-through;text-decoration-thickness:1px}
+.why{display:block;font-size:13px;color:var(--mute);text-decoration:none;margin-top:3px}
+.chip{font-size:12px;font-weight:700;background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:2px 8px;margin-left:6px}
+.chip:hover{border-color:var(--ink)}
+.counts{font-size:13px;color:var(--mute);margin-top:10px}
+.drawer{position:sticky;top:16px;background:var(--ink);color:#fff;border-radius:26px;padding:24px}
+.drawer h3{font-family:var(--display);font-size:28px;font-weight:700;line-height:1.05}
+.drawer dt{font-size:13px;font-weight:700;color:var(--mint);margin-top:14px}
+.drawer dd{font-size:15px;color:#e6e6e2;margin-left:0}
+pre{background:#1e1e1e;border-radius:14px;padding:12px 14px;font-size:12.5px;overflow-x:auto;margin-top:6px;color:#d8e6df;white-space:pre-wrap;word-break:break-all}
+.empty{color:#b9b9b4;font-size:15px}
+.limits{background:var(--lav);border-radius:22px;padding:18px 22px;margin-top:18px;font-size:15px}
+[hidden]{display:none!important}
+@media (max-width:760px){
+  .hero,.cols{grid-template-columns:1fr}
+  .hero-l{padding:32px 24px}
+  .head{grid-template-columns:1fr;padding:24px}
+  .drawer{position:static}
+  .upload{flex-wrap:wrap;border-radius:26px}.drop{flex-basis:100%}
+  .nav{padding-left:16px}
+}
+</style>
+
+<style>
+/* APK X-ray refinement: quiet black + pastel, cleaner hierarchy */
+:root{
+  --ink:#151515;
+  --paper:#f3f1f4;
+  --card:#fffdfd;
+  --line:#dedbe2;
+  --mute:#6d6872;
+  --mint:#d8eee5;
+  --lav:#e7e0f5;
+  --peach:#f4e1d8;
+  --sky:#dceaf2;
+}
+html{background:var(--paper)}
+body{padding:18px 14px 48px;font-size:15px;line-height:1.6}
+.wrap{max-width:1040px}
+.nav{border-radius:18px;padding:8px 10px 8px 20px;margin-bottom:18px;background:#171719;box-shadow:none}
+.brand{font-size:20px;letter-spacing:.035em}
+.tabs{gap:3px}
+.tab{padding:8px 15px;font-size:13px}
+.tab[aria-current="page"]{background:#e7e0f5;color:#171719}
+.hero{border-radius:26px;grid-template-columns:1.02fr 1fr;background:#171719}
+.hero-l{padding:clamp(28px,5vw,48px);display:flex;flex-direction:column;align-items:flex-start;justify-content:center;min-width:0}
+.title{font-size:clamp(64px,10vw,104px);letter-spacing:-.025em}
+.tag{margin-top:12px;margin-left:2px;transform:rotate(-2deg);border-radius:5px;background:#d8eee5;font-size:12px;padding:5px 11px}
+.hero-r{margin:10px;background:#fffdfd;border-radius:19px;padding:clamp(22px,3vw,32px);align-self:stretch;display:flex;flex-direction:column;justify-content:center}
+.hero-r h2{font-size:clamp(19px,2.4vw,24px);letter-spacing:-.035em}
+.hero-r p{font-size:14px;line-height:1.7}
+.badge{background:#e7e0f5;border:1px solid #d8cfee;margin-top:16px;font-size:12px}
+.upload{border-radius:18px;padding:7px;margin:16px 0;background:#fffdfd;box-shadow:0 5px 18px #17171908}
+.drop{font-size:14px}
+.pill{font-size:13px;padding:10px 16px}
+.pill.ghost{background:#f3f1f4}
+.pill.solid{background:#171719}
+.pipe{gap:6px;margin:10px 0}
+.pipe li{font-size:12px;padding:6px 12px 6px 7px;background:#fffdfd}
+.pipe li::before{width:22px;height:22px;background:#171719}
+.note{font-size:12px;max-width:80ch;line-height:1.7}
+.head{border-radius:24px;padding:clamp(22px,4vw,34px);background:#171719}
+.head h1{font-size:clamp(40px,7vw,60px);letter-spacing:-.025em}
+.score{background:#f4e1d8;border-radius:16px;min-width:150px;padding:13px 17px}
+.score b{font-size:30px}
+.cols{gap:14px;margin-top:14px;grid-template-columns:minmax(0,1.15fr) minmax(280px,.85fr)}
+.card{border-radius:20px;padding:clamp(17px,2.5vw,24px);box-shadow:0 4px 18px #17171906}
+.card+.card{margin-top:14px}
+h3{font-size:17px;letter-spacing:-.02em;display:flex;align-items:center;gap:8px}
+.sub{font-size:13px}
+.find{border-radius:13px;padding:11px 12px;background:#fffdfd;gap:9px}
+.find:hover{background:#faf8fc}
+.rid{background:#f0edf3;border-radius:6px}
+.ft{font-size:13px}
+.sev{font-size:11px;padding:4px 8px}
+.sev.high{background:#f4e1d8}.sev.mod{background:#e7e0f5}
+.node{background:#dceaf2;font-size:12px;padding:7px 11px}
+.lang{background:#f3f1f4}
+.lang button{font-size:12px;padding:5px 11px}
+.claim{gap:8px;padding:11px 0}
+.st{font-size:11px}
+.claim p{font-size:13px;line-height:1.65}
+.chip{font-size:11px}
+.drawer{border-radius:20px;padding:22px;background:#171719;box-shadow:none}
+.drawer h3{font-size:26px}
+.drawer dt{color:#d8eee5}
+pre{font-size:11.5px;background:#242426}
+.limits{background:#e7e0f5;border:1px solid #d8cfee;border-radius:17px;padding:16px 19px;margin-top:14px;font-size:13px}
+button:focus-visible,.drop:focus-within{outline:3px solid #b8a9df;outline-offset:3px}
+@media(max-width:760px){
+  body{padding:12px 10px 32px}
+  .nav{border-radius:16px;padding:8px 8px 8px 14px}
+  .brand{font-size:18px}
+  .tabs{gap:0}
+  .tab{padding:8px 10px;font-size:12px}
+  .hero,.cols{grid-template-columns:1fr}
+  .hero-l{padding:30px 24px 26px}
+  .title{font-size:clamp(64px,17vw,92px)}
+  .hero-r{margin:0 8px 8px;padding:22px;border-radius:17px}
+  .head{grid-template-columns:1fr;padding:22px}
+  .score{justify-self:start}
+  .drawer{position:static}
+  .upload{flex-wrap:wrap;border-radius:18px}
+  .drop{flex-basis:100%;padding:10px 12px}
+  .upload .pill{flex:1}
+  .pipe li{font-size:11px}
+}
+@media(max-width:390px){
+  .brand{font-size:16px}
+  .tab{padding:7px 8px;font-size:11px}
+  .upload .pill{padding:10px 11px}
+  .find{flex-wrap:wrap}
+  .ft{min-width:120px}
+}
+</style>
+
+</head>
+<body>
+<div class="wrap">
+  <nav class="nav" aria-label="Main">
+    <a class="brand" href="#" id="brand-home" aria-label="APK X-ray home"><img class="brand-mark" src="assets/apk-xray-mark.png" alt=""><span>APK X-RAY</span></a>
+    <div class="tabs">
+      <button class="tab" id="t-analyze" aria-current="page"><img class="ui-icon" src="assets/icons/analyze.png" alt="">Analyze</button>
+      <button class="tab" id="t-report"><img class="ui-icon" src="assets/icons/report.png" alt="">Report</button>
+    </div>
+  </nav>
+
+  <!-- ANALYZE -->
+  <main id="v-analyze">
+    <section class="hero">
+      <div class="hero-l">
+        <div class="title">APK<br>X-RAY</div>
+        <span class="tag">Inspect before you install</span>
+      </div>
+      <div class="hero-r">
+        <h2><img class="ui-icon" src="assets/icons/shield-check.png" alt="" style="width:22px;height:22px;margin-right:8px">What can this app access?</h2>
+        <p>Upload an Android app file. We read what it asks for, show the evidence, and explain it in plain language. The app is never run.</p>
+        <span class="badge">Static analysis only</span>
+      </div>
+    </section>
+
+    <div class="upload">
+      <label class="drop"><input type="file" id="file" accept=".apk"><span id="fname">Choose an APK file</span></label>
+      <button class="pill ghost" id="sample" type="button"><img class="ui-icon" src="assets/icons/report.png" alt=""> View sample report</button>
+      <button class="pill solid" id="go" type="button"><img class="ui-icon" src="assets/icons/scan.png" alt=""> Analyze APK</button>
+    </div>
+
+    <ol class="pipe" aria-label="How it works">
+      <li>Upload</li><li>Extract</li><li>Apply rules</li><li>Score</li><li>Explain</li><li>Verify</li>
+    </ol>
+    <p class="note">Prototype preview. No APK is uploaded or analyzed yet. Sample reports use illustrative data.</p>
+  </main>
+
+  <!-- REPORT -->
+  <main id="v-report" hidden>
+    <section class="head">
+      <div>
+        <h1>RTO Challan</h1>
+        <p class="meta">test.lookalike.challan · v1.0 · sha256 9f2c…a41e · sample data</p>
+      </div>
+      <div class="score"><b>High</b><span>rule-based exposure · 9 points</span></div>
+      <div class="bars" id="bars"></div>
+    </section>
+
+    <div class="cols">
+      <div>
+        <section class="card">
+          <h3><img class="ui-icon" src="assets/icons/alert.png" alt=""> Findings</h3>
+          <p class="sub">Select one to see its evidence.</p>
+          <div id="finds"></div>
+        </section>
+
+        <section class="card">
+          <h3>Capability chain</h3>
+          <p class="sub">Shown only because every link has evidence.</p>
+          <div class="chain">
+            <button class="node" data-r="R01">Receives SMS</button><span class="arrow">→</span>
+            <button class="node" data-r="R03">Starts at boot</button><span class="arrow">→</span>
+            <button class="node" data-e="e4">Can reach the internet</button>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="lang" role="group" aria-label="Language">
+            <button id="l-en" aria-pressed="true">English</button><button id="l-hi" aria-pressed="false">हिन्दी</button>
+          </div>
+          <h3>Explanation</h3>
+          <p class="sub" id="exsub">Every sentence must cite evidence.</p>
+          <div id="claims"></div>
+          <p class="counts" id="counts"></p>
+        </section>
+      </div>
+
+      <aside class="drawer" aria-live="polite" id="drawer"></aside>
+    </div>
+
+    <div class="limits" id="limits"></div>
+  </main>
+</div>
+
+<script>
+const EV={
+ e1:{t:'Permission',x:'<uses-permission android:name="android.permission.READ_SMS"/>'},
+ e2:{t:'Permission',x:'<uses-permission android:name="android.permission.RECEIVE_SMS"/>'},
+ e3:{t:'Permission and receiver',x:'<uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>\n<receiver android:name=".BootReceiver"/>'},
+ e4:{t:'Permission',x:'<uses-permission android:name="android.permission.INTERNET"/>'},
+ e5:{t:'Service',x:'<service android:name=".HelperService"\n  android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"/>'},
+ e6:{t:'Permission',x:'<uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>'}
+};
+const F=[
+ {id:'R01',t:'Can read and receive SMS',sev:'high',pts:3,ev:['e1','e2'],
+  can:'Read and receive text messages.',could:'Messages such as one-time passcodes could be seen by the app.',cant:'Whether it reads them, or sends them anywhere.'},
+ {id:'R03',t:'Starts when the phone restarts',sev:'mod',pts:1,ev:['e3'],
+  can:'Start itself after a reboot.',could:'It could keep running without being opened.',cant:'What it does once running.'},
+ {id:'R04',t:'Declares an accessibility service',sev:'high',pts:3,ev:['e5'],
+  can:'Ask to observe and act on the screen.',could:'It could read what is shown or tap on the user’s behalf, if the user allows it.',cant:'Whether it is used for anything beyond assistance.'},
+ {id:'R05',t:'Can draw over other apps',sev:'mod',pts:2,ev:['e6'],
+  can:'Show content on top of other apps.',could:'Overlays could imitate another screen.',cant:'Whether any overlay is ever shown.'}
+];
+const C={
+ en:[
+  {s:'ok',t:'This app can read and receive SMS messages.',e:['e1','e2']},
+  {s:'ok',t:'It can start automatically when the phone restarts.',e:['e3']},
+  {s:'ok',t:'It declares an accessibility service, which can observe and act on the screen.',e:['e5']},
+  {s:'no',t:'This app steals your OTPs.',e:[],why:'Removed: states intent, no evidence supports it.'}
+ ],
+ hi:[
+  {s:'ok',t:'यह ऐप SMS संदेश पढ़ और प्राप्त कर सकता है।',e:['e1','e2']},
+  {s:'ok',t:'फ़ोन के दोबारा चालू होने पर यह ऐप अपने-आप शुरू हो सकता है।',e:['e3']},
+  {s:'ok',t:'इसमें एक एक्सेसिबिलिटी सर्विस घोषित है, जो स्क्रीन को देख सकती है और उस पर कार्य कर सकती है।',e:['e5']},
+  {s:'no',t:'यह ऐप आपके OTP चुराता है।',e:[],why:'हटाया गया: यह इरादे का दावा है, कोई प्रमाण नहीं।'}
+ ]};
+const L={
+ en:{ok:'Verified',no:'Removed',lim:'Permissions alone do not prove an app is malicious. We did not run this app. We cannot see what it does once running, or why.',
+     cnt:(a,b)=>a+' sentences verified, '+b+' removed.',sub:'Every sentence must cite evidence.'},
+ hi:{ok:'सत्यापित',no:'हटाया गया',lim:'केवल अनुमतियाँ यह साबित नहीं करतीं कि ऐप दुर्भावनापूर्ण है। हमने इस ऐप को चलाया नहीं है। चलने के बाद वह क्या करता है, यह हम नहीं देख सकते।',
+     cnt:(a,b)=>a+' वाक्य सत्यापित, '+b+' हटाए गए।',sub:'हर वाक्य के साथ प्रमाण होना ज़रूरी है।'}
+};
+const $=s=>document.querySelector(s);
+let lang='en';
+
+function views(v){
+  $('#v-analyze').hidden=v!=='analyze';$('#v-report').hidden=v!=='report';
+  $('#t-analyze').setAttribute('aria-current',v==='analyze'?'page':'false');
+  $('#t-report').setAttribute('aria-current',v==='report'?'page':'false');
+  window.scrollTo(0,0);
+}
+$('#brand-home').onclick=(e)=>{e.preventDefault();views('analyze');};
+$('#t-analyze').onclick=()=>views('analyze');
+$('#t-report').onclick=()=>views('report');
+$('#go').onclick=()=>{
+  const selected=$('#file').files[0];
+  if(!selected){
+    $('#fname').textContent='Choose an APK file first';
+    $('#file').focus();
+    return;
+  }
+  if(!selected.name.toLowerCase().endsWith('.apk')){
+    $('#fname').textContent='Please select an .apk file';
+    return;
+  }
+  alert('This is a UI prototype. No APK is actually analyzed yet. Open the sample report to preview the interface.');
+};
+$('#sample').onclick=()=>views('report');
+$('#file').onchange=e=>{$('#fname').textContent=e.target.files[0]?e.target.files[0].name:'Choose an APK file'};
+
+function bars(){
+  $('#bars').innerHTML=F.slice().sort((a,b)=>b.pts-a.pts).map(f=>
+   '<div class="bar"><span>'+f.id+'</span><i style="width:'+(f.pts/3*100)+'%"></i><span>'+f.pts+'</span></div>').join('');
+}
+function finds(){
+  $('#finds').innerHTML=F.map(f=>
+   '<button class="find" data-r="'+f.id+'" aria-pressed="false"><span class="rid">'+f.id+'</span><span class="ft">'+f.t+'</span><span class="sev '+f.sev+'">'+(f.sev==='high'?'▲ High':'◆ Moderate')+'</span></button>').join('');
+}
+function claims(){
+  const c=C[lang],l=L[lang];
+  $('#claims').innerHTML=c.map(x=>
+   '<div class="claim'+(x.s==='no'?' removed':'')+'"><span class="st '+x.s+'">'+(x.s==='ok'?'✓ ':'✕ ')+l[x.s]+'</span><div><p>'+x.t+'</p>'+
+   (x.why?'<span class="why">'+x.why+'</span>':'')+
+   '<div>'+x.e.map(e=>'<button class="chip" data-e="'+e+'">'+e+'</button>').join('')+'</div></div></div>').join('');
+  const ok=c.filter(x=>x.s==='ok').length;
+  $('#counts').textContent=l.cnt(ok,c.length-ok);
+  $('#exsub').textContent=l.sub;
+  $('#limits').innerHTML='<b>'+(lang==='en'?'What we cannot check. ':'हम क्या नहीं जाँच सकते। ')+'</b>'+l.lim;
+}
+function drawerEmpty(){$('#drawer').innerHTML='<h3><img class="ui-icon" src="assets/icons/search.png" alt=""> Evidence</h3><p class="empty" style="margin-top:10px">Select a finding, a chain step or an evidence tag to see exactly what in the app supports it.</p>'}
+function show(id,eids){
+  const f=F.find(x=>x.id===id);
+  document.querySelectorAll('.find').forEach(b=>b.setAttribute('aria-pressed',String(b.dataset.r===id)));
+  let h='';
+  if(f){
+    h+='<h3>'+f.id+' · '+f.t+'</h3><dl><dt>Can</dt><dd>'+f.can+'</dd><dt>Could</dt><dd>'+f.could+'</dd><dt>Can’t prove</dt><dd>'+f.cant+'</dd></dl>';
+  }else{h+='<h3>Evidence '+eids[0]+'</h3>'}
+  h+='<dl><dt>Found in the app</dt></dl>'+(f?f.ev:eids).map(e=>'<p style="font-size:13px;margin-top:8px;color:#b9b9b4">'+e+' · '+EV[e].t+'</p><pre>'+EV[e].x.replace(/</g,'&lt;')+'</pre>').join('');
+  $('#drawer').innerHTML=h;
+  if(window.innerWidth<=760)$('#drawer').scrollIntoView({behavior:'smooth',block:'nearest'});
+}
+document.addEventListener('click',e=>{
+  const r=e.target.closest('[data-r]'),v=e.target.closest('[data-e]');
+  if(r&&r.dataset.r)show(r.dataset.r);else if(v&&v.dataset.e)show(null,[v.dataset.e]);
+});
+$('#l-en').onclick=()=>{lang='en';$('#l-en').setAttribute('aria-pressed','true');$('#l-hi').setAttribute('aria-pressed','false');claims()};
+$('#l-hi').onclick=()=>{lang='hi';$('#l-hi').setAttribute('aria-pressed','true');$('#l-en').setAttribute('aria-pressed','false');claims()};
+bars();finds();claims();drawerEmpty();
+</script>
+</body>
+</html>
