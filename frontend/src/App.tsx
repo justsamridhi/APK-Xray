@@ -1,11 +1,31 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Badge, Card, EmptyState, Icon, NavigationLayout, UploadPlaceholder, type IconName } from './components'
+import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, PrimaryButton, SecondaryButton, type IconName } from './components'
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
 import { themeStorageKey, type Theme } from './theme'
 import { sampleReport, type SampleFinding } from './sampleReport'
 import './styles.css'
 
 const validPaths: string[] = ['/', '/analyze', '/report', '/report/sample', '/about']
+const maxApkSize = 50 * 1024 * 1024
+const uploadEndpoint = import.meta.env.VITE_API_UPLOAD_URL ?? '/api/upload'
+const apkMimeTypes = new Set(['application/vnd.android.package-archive', 'application/octet-stream', ''])
+
+type UploadState = 'idle' | 'ready' | 'uploading' | 'error'
+
+function formatFileSize(bytes: number) {
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+function validateApk(file: File): string | null {
+  if (!file.name.toLowerCase().endsWith('.apk') || !apkMimeTypes.has(file.type)) {
+    return 'Choose an Android APK file. Other file types are not accepted.'
+  }
+  if (file.size > maxApkSize) {
+    return 'This APK is larger than the 50 MB limit.'
+  }
+  return null
+}
 
 function getInitialTheme(): Theme {
   try {
@@ -18,12 +38,98 @@ function getInitialTheme(): Theme {
 }
 
 function AnalyzePage() {
+  const fileInputRef = useRef<HTMLInputElement>(null)
+  const [file, setFile] = useState<File | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [state, setState] = useState<UploadState>('idle')
+  const [isDragging, setIsDragging] = useState(false)
+
+  const selectFile = (candidate: File | undefined) => {
+    if (!candidate) return
+    const validationError = validateApk(candidate)
+    setError(validationError)
+    setFile(validationError ? null : candidate)
+    setState(validationError ? 'error' : 'ready')
+  }
+
+  const handleFileInput = (event: ChangeEvent<HTMLInputElement>) => {
+    selectFile(event.target.files?.[0])
+    event.target.value = ''
+  }
+
+  const handleDrop = (event: DragEvent<HTMLDivElement>) => {
+    event.preventDefault()
+    setIsDragging(false)
+    selectFile(event.dataTransfer.files[0])
+  }
+
+  const handleDropzoneKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      fileInputRef.current?.click()
+    }
+  }
+
+  const uploadFile = async () => {
+    if (!file || state === 'uploading') return
+    setState('uploading')
+    setError(null)
+    try {
+      const response = await fetch(uploadEndpoint, {
+        method: 'POST',
+        body: (() => {
+          const formData = new FormData()
+          formData.append('file', file)
+          return formData
+        })(),
+      })
+      if (!response.ok) {
+        throw new Error(`Upload failed with status ${response.status}.`)
+      }
+      window.history.pushState({}, '', '/report')
+      window.dispatchEvent(new PopStateEvent('popstate'))
+    } catch (uploadError) {
+      setState('error')
+      setError(uploadError instanceof Error ? uploadError.message : 'The upload could not be completed. Try again.')
+    }
+  }
+
   return <main className="page-content">
     <section className="hero-panel">
       <div><Badge tone="safe">INSPECT BEFORE YOU INSTALL</Badge><h1>Evidence-first Android static analysis.</h1><p>Understand what an APK declares before it reaches a device. APKs will be inspected without being run or installed.</p></div>
       <Card><span className="eyebrow"><Icon name="shieldCheck" /> DESIGN SYSTEM FOUNDATION</span><h2>What can this app access?</h2><p className="page-intro">A calm, reusable interface for future manifest and permission evidence.</p></Card>
     </section>
-    <Card className="upload-placeholder"><span className="eyebrow">INPUT BAY</span><h2>Analyze an APK</h2><p className="page-intro">Upload is not available yet. Backend integration is not configured, so no file is selected, uploaded, or executed.</p><UploadPlaceholder /><span className="demo-note">NO APK HAS BEEN UPLOADED OR ANALYZED.</span><a className="text-link" href="/report/sample">Explore a clearly labeled sample report</a></Card>
+    <Card className="upload-placeholder">
+      <span className="eyebrow">INPUT BAY</span>
+      <h2>Analyze an APK</h2>
+      <p className="page-intro">Select an APK to send it for static analysis. The file is uploaded only; it is never executed or installed.</p>
+      <input ref={fileInputRef} className="visually-hidden" type="file" accept=".apk,application/vnd.android.package-archive" onChange={handleFileInput} aria-label="Choose APK file" />
+      <div
+        className={`upload-dropzone${isDragging ? ' is-dragging' : ''}${error ? ' has-error' : ''}`}
+        role="button"
+        tabIndex={state === 'uploading' ? -1 : 0}
+        aria-label="Drop an APK file here or press Enter to choose one"
+        onClick={() => fileInputRef.current?.click()}
+        onKeyDown={handleDropzoneKeyDown}
+        onDragEnter={(event) => { event.preventDefault(); setIsDragging(true) }}
+        onDragOver={(event) => event.preventDefault()}
+        onDragLeave={(event) => { if (event.currentTarget === event.target) setIsDragging(false) }}
+        onDrop={handleDrop}
+      >
+        <Icon name="upload" size={32} />
+        <strong>{file ? file.name : 'Select or drop an Android APK file'}</strong>
+        <span>{file ? `${formatFileSize(file.size)} · Ready to upload` : 'APK files only · Maximum size 50 MB'}</span>
+        <SecondaryButton type="button" onClick={(event) => { event.stopPropagation(); fileInputRef.current?.click() }} disabled={state === 'uploading'}>Choose APK</SecondaryButton>
+      </div>
+      {error && <p className="upload-error" role="alert"><Icon name="alert" />{error}</p>}
+      {file && !error && <p className="upload-success" role="status"><Icon name="shieldCheck" />File validated and ready for static analysis.</p>}
+      {state === 'uploading' && <LoadingSpinner label="Uploading APK for static analysis…" />}
+      <div className="upload-actions">
+        <PrimaryButton type="button" onClick={uploadFile} disabled={!file || state === 'uploading'}>{state === 'uploading' ? 'Uploading…' : 'Start analysis'}</PrimaryButton>
+        <span className="demo-note">NO APK IS EXECUTED.</span>
+      </div>
+      <a className="text-link" href="/report/sample">Explore a clearly labeled sample report</a>
+    </Card>
     <section className="pipeline-section" aria-labelledby="pipeline-heading"><div><span className="eyebrow">PLANNED PIPELINE</span><h2 id="pipeline-heading">From package to evidence</h2></div><div className="pipeline-grid">{([['upload', 'Upload'], ['file', 'Extract'], ['rules', 'Apply rules'], ['benchmark', 'Score'], ['info', 'Explain'], ['shieldCheck', 'Verify']] as [IconName, string][]).map(([icon, label]) => <div className="pipeline-step" key={label}><Icon name={icon} /><span>{label}</span><small>Planned</small></div>)}</div><p className="page-intro">No step runs in this frontend yet. A future backend will provide real progress and results.</p></section>
   </main>
 }
