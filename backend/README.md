@@ -46,3 +46,36 @@ APK contents.
   handling, and malformed or unsupported model responses.
 
 No production dependency is introduced by this spike.
+
+## Report schema (Issue #8)
+
+The versioned report contract is
+[`schema/report.schema.json`](schema/report.schema.json). Version `1.0`
+requires stable report and evidence IDs, APK metadata, score information,
+findings, capability chains, and evidence-grounded claims. Finding evidence is
+embedded in each finding so the frontend can render it directly; claim and
+capability steps refer to those stable evidence IDs.
+
+Validate a report with the validation-only dependency set:
+
+```powershell
+python -m pip install -r backend\requirements-validation.txt
+python backend\validation\validate_report_schema.py backend\validation\fixtures\reports\valid.json
+```
+
+The fixture set includes a valid report, a valid no-findings report, malformed
+JSON-shaped data, and a structurally partial report. Missing evidence is
+represented explicitly with an `unavailable` evidence item rather than by
+silently omitting the reference.
+
+### Compatibility rules
+
+- Producers must emit the exact `schemaVersion` they implement.
+- Consumers must reject unsupported major versions and must not silently
+  reinterpret unknown required fields.
+- New optional fields may be added within version `1.x`; existing fields,
+  enum values, and ID meanings must not change.
+- A breaking field, enum, or meaning change requires a new major schema
+  version and a new schema `$id`.
+- Stable IDs are opaque to consumers and must remain unchanged when the same
+  source fact is re-rendered.

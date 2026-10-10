@@ -1,0 +1,83 @@
+{
+  "schemaVersion": "1.0",
+  "reportId": "report:sample-001",
+  "generatedAt": "2026-10-10T12:00:00Z",
+  "app": {
+    "name": "Example Lantern",
+    "packageName": "org.example.lantern",
+    "version": "1.0.0",
+    "minSdk": 26,
+    "targetSdk": 35,
+    "permissions": [
+      "android.permission.INTERNET"
+    ],
+    "components": [
+      {
+        "id": "component:main-activity",
+        "type": "activity",
+        "name": "org.example.lantern.MainActivity",
+        "exported": true,
+        "permission": null
+      }
+    ]
+  },
+  "score": {
+    "value": 12,
+    "label": "Low exposure",
+    "severity": "low",
+    "breakdown": [
+      {
+        "ruleId": "APKX-NET-001",
+        "points": 12
+      }
+    ]
+  },
+  "findings": [
+    {
+      "ruleId": "APKX-NET-001",
+      "severity": "low",
+      "title": "Network access declared",
+      "summary": "The application declares internet access.",
+      "evidence": [
+        {
+          "id": "manifest:permission:internet",
+          "label": "android.permission.INTERNET",
+          "snippet": null,
+          "availability": "available"
+        }
+      ],
+      "claimStatus": "verified",
+      "points": 12,
+      "explanations": {
+        "en": "The manifest declares network access.",
+        "hi": "मैनिफेस्ट में नेटवर्क एक्सेस घोषित है।"
+      }
+    }
+  ],
+  "capabilityChains": [
+    {
+      "id": "chain:C1",
+      "label": "Network access",
+      "steps": [
+        {
+          "id": "chain:C1:permission",
+          "label": "Internet permission declared",
+          "evidenceIds": [
+            "manifest:permission:internet"
+          ]
+        }
+      ]
+    }
+  ],
+  "claims": [
+    {
+      "id": "claim:network-001",
+      "text": "The app can access the network.",
+      "classification": "Can",
+      "evidenceIds": [
+        "manifest:permission:internet"
+      ],
+      "status": "verified"
+    }
+  ]
+}
