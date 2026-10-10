@@ -49,6 +49,9 @@
       "items": {
         "$ref": "#/$defs/claim"
       }
+    },
+    "ai": {
+      "$ref": "#/$defs/ai"
     }
   },
   "$defs": {
@@ -410,6 +413,32 @@
             "unsupported",
             "unavailable"
           ]
+        }
+      }
+    },
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "status",
+        "provider",
+        "message"
+      ],
+      "properties": {
+        "status": {
+          "enum": [
+            "verified",
+            "unavailable",
+            "error"
+          ]
+        },
+        "provider": {
+          "type": "string",
+          "minLength": 1
+        },
+        "message": {
+          "type": "string",
+          "minLength": 1
         }
       }
     }

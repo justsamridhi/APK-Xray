@@ -4,11 +4,10 @@ import reportIcon from '../../assets/apk-xray-icons/report.svg'
 import { themeStorageKey, type Theme } from './theme'
 import { sampleReport, type SampleFinding } from './sampleReport'
 import { normalizeReport, type ReportData, type ReportFinding, type ReportLanguage } from './report'
+import { maxApkSize, upload, UploadError } from './api'
 import './styles.css'
 
 const validPaths: string[] = ['/', '/analyze', '/report', '/report/sample', '/about']
-const maxApkSize = 50 * 1024 * 1024
-const uploadEndpoint = import.meta.env.VITE_API_UPLOAD_URL ?? '/api/upload'
 const apkMimeTypes = new Set(['application/vnd.android.package-archive', 'application/octet-stream', ''])
 
 type UploadState = 'idle' | 'ready' | 'uploading' | 'error'
@@ -22,6 +21,7 @@ function validateApk(file: File): string | null {
   if (!file.name.toLowerCase().endsWith('.apk') || !apkMimeTypes.has(file.type)) {
     return 'Choose an Android APK file. Other file types are not accepted.'
   }
+  if (file.size === 0) return 'This APK is empty. Choose a non-empty APK file.'
   if (file.size > maxApkSize) {
     return 'This APK is larger than the 50 MB limit.'
   }
@@ -38,12 +38,15 @@ function getInitialTheme(): Theme {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
-function AnalyzePage() {
+function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
   const [error, setError] = useState<string | null>(null)
   const [state, setState] = useState<UploadState>('idle')
   const [isDragging, setIsDragging] = useState(false)
+  const [controller, setController] = useState<AbortController | null>(null)
+  const resultRef = useRef<HTMLDivElement>(null)
+  const requestIdRef = useRef(0)
 
   const selectFile = (candidate: File | undefined) => {
     if (!candidate) return
@@ -75,30 +78,33 @@ function AnalyzePage() {
     if (!file || state === 'uploading') return
     setState('uploading')
     setError(null)
+    const requestId = ++requestIdRef.current
+    const requestController = new AbortController()
+    setController(requestController)
+    const timeout = window.setTimeout(() => requestController.abort(new DOMException('Timed out', 'TimeoutError')), 90_000)
     try {
-      const response = await fetch(uploadEndpoint, {
-        method: 'POST',
-        body: (() => {
-          const formData = new FormData()
-          formData.append('file', file)
-          return formData
-        })(),
-      })
-      if (!response.ok) {
-        throw new Error(`Upload failed with status ${response.status}.`)
-      }
+      const result = await upload(file, requestController.signal)
+      if (requestIdRef.current !== requestId) return
+      onReport(result)
       window.history.pushState({}, '', '/report')
       window.dispatchEvent(new PopStateEvent('popstate'))
     } catch (uploadError) {
+      if (requestIdRef.current !== requestId) return
       setState('error')
-      setError(uploadError instanceof Error ? uploadError.message : 'The upload could not be completed. Try again.')
+      setError(uploadError instanceof UploadError ? uploadError.message : 'The upload could not be completed. Try again.')
+    } finally {
+      window.clearTimeout(timeout)
+      if (requestIdRef.current === requestId) {
+        setController(null)
+        if (resultRef.current) resultRef.current.focus()
+      }
     }
   }
 
   return <main className="page-content">
     <section className="hero-panel">
       <div><Badge tone="safe">INSPECT BEFORE YOU INSTALL</Badge><h1>Evidence-first Android static analysis.</h1><p>Understand what an APK declares before it reaches a device. APKs will be inspected without being run or installed.</p></div>
-      <Card><span className="eyebrow"><Icon name="shieldCheck" /> DESIGN SYSTEM FOUNDATION</span><h2>What can this app access?</h2><p className="page-intro">A calm, reusable interface for future manifest and permission evidence.</p></Card>
+      <Card><span className="eyebrow"><Icon name="shieldCheck" /> EVIDENCE REVIEW</span><h2>What does this APK declare?</h2><p className="page-intro">Review permissions and exported components before installing. Findings are deterministic and linked to manifest evidence.</p></Card>
     </section>
     <Card className="upload-placeholder">
       <span className="eyebrow">INPUT BAY</span>
@@ -123,15 +129,16 @@ function AnalyzePage() {
       </div>
       {error && <p className="upload-error" role="alert"><Icon name="alert" />{error}</p>}
       {file && !error && <p className="upload-success" role="status"><Icon name="shieldCheck" />File validated and ready for static analysis.</p>}
-      {state === 'uploading' && <LoadingSpinner label="Uploading APK for static analysis…" />}
+      {state === 'uploading' && <div ref={resultRef} tabIndex={-1}><LoadingSpinner label="Analyzing APK with the static backend…" /></div>}
       <div className="upload-actions">
         <SecondaryButton type="button" onClick={() => fileInputRef.current?.click()} disabled={state === 'uploading'}>Choose APK</SecondaryButton>
-        <PrimaryButton type="button" onClick={uploadFile} disabled={!file || state === 'uploading'}>{state === 'uploading' ? 'Uploading…' : 'Start analysis'}</PrimaryButton>
+        <PrimaryButton type="button" onClick={uploadFile} disabled={!file || state === 'uploading'}>{state === 'uploading' ? 'Analyzing…' : 'Start analysis'}</PrimaryButton>
+        {state === 'uploading' && <SecondaryButton type="button" onClick={() => controller?.abort()} aria-label="Cancel analysis">Cancel analysis</SecondaryButton>}
         <span className="demo-note">NO APK IS EXECUTED.</span>
       </div>
       <a className="text-link" href="/report/sample">Explore a clearly labeled sample report</a>
     </Card>
-    <section className="pipeline-section" aria-labelledby="pipeline-heading"><div><span className="eyebrow">PLANNED PIPELINE</span><h2 id="pipeline-heading">From package to evidence</h2></div><div className="pipeline-grid">{([['upload', 'Upload'], ['file', 'Extract'], ['rules', 'Apply rules'], ['benchmark', 'Score'], ['info', 'Explain'], ['shieldCheck', 'Verify']] as [IconName, string][]).map(([icon, label]) => <div className="pipeline-step" key={label}><Icon name={icon} /><span>{label}</span><small>Planned</small></div>)}</div><p className="page-intro">No step runs in this frontend yet. A future backend will provide real progress and results.</p></section>
+    <section className="pipeline-section" aria-labelledby="pipeline-heading"><div><span className="eyebrow">STATIC PIPELINE</span><h2 id="pipeline-heading">From package to evidence</h2></div><div className="pipeline-grid">{([['upload', 'Receive APK'], ['file', 'Read manifest'], ['rules', 'Apply rules'], ['benchmark', 'Calculate score'], ['info', 'Explain evidence'], ['shieldCheck', 'Validate report']] as [IconName, string][]).map(([icon, label]) => <div className="pipeline-step" key={label}><Icon name={icon} /><span>{label}</span><small>Backend</small></div>)}</div><p className="page-intro">The backend reads declarations with Androguard, calculates the score deterministically, and never installs or executes the APK.</p></section>
   </main>
 }
 
@@ -192,18 +199,34 @@ function ReportContent({ report }: { report: ReportData }) {
   const scoreTone = report.score.severity === 'high' || report.score.severity === 'very-high' ? 'warning' : report.score.severity === 'moderate' ? 'scan' : 'safe'
   const scoreLabel = report.score.severity.replace('-', ' ').toUpperCase()
   const evidenceForFinding = (finding: ReportFinding) => setEvidenceFinding(finding)
-  return <><div className="report-summary"><div><span className="eyebrow">ANALYSIS REPORT</span><h1 className="page-title">{report.app.name}</h1><p className="page-intro">{report.app.packageName} · version {report.app.version}</p></div><div className="report-score"><span className="eyebrow">EXPOSURE SCORE</span><strong>{report.score.value}</strong><Badge tone={scoreTone}>{scoreLabel}</Badge><span className="score-label">{report.score.label}</span></div></div>
+  const download = () => {
+    const url = URL.createObjectURL(new Blob([JSON.stringify(report.raw, null, 2)], { type: 'application/json' }))
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `${report.app.packageName}-apk-xray-report.json`
+    document.body.appendChild(link)
+    link.click()
+    link.remove()
+    URL.revokeObjectURL(url)
+  }
+  return <><div className="report-summary"><div><span className="eyebrow">ANALYSIS REPORT</span><h1 className="page-title">{report.app.name}</h1><p className="page-intro">{report.app.packageName} · version {report.app.version}</p>{report.ai && <p className="page-intro" role="status"><Badge tone={report.ai.status === 'verified' ? 'safe' : report.ai.status === 'error' ? 'warning' : 'schema'}>{report.ai.status === 'verified' ? 'AI VERIFIED' : report.ai.status === 'error' ? 'AI ERROR' : 'AI UNAVAILABLE'}</Badge> {report.ai.message}</p>}</div><div className="report-score"><span className="eyebrow">EXPOSURE SCORE</span><strong>{report.score.value}</strong><Badge tone={scoreTone}>{scoreLabel}</Badge><span className="score-label">{report.score.label}</span><button type="button" className="text-button" onClick={download}>Download report JSON</button></div></div>
     <section className="report-section" aria-labelledby="breakdown-heading"><div className="section-heading"><div><span className="eyebrow">DETERMINISTIC SCORING</span><h2 id="breakdown-heading">Score breakdown</h2></div></div><Card className="breakdown-card"><table className="breakdown-table"><caption className="visually-hidden">Rule contributions to the backend-provided exposure score</caption><thead><tr><th scope="col">Rule</th><th scope="col">Contribution</th></tr></thead><tbody>{report.findings.filter((finding) => finding.points !== null).map((finding) => <tr key={finding.ruleId}><th scope="row">{finding.ruleId}</th><td>{finding.points} points</td></tr>)}</tbody></table>{report.findings.every((finding) => finding.points === null) && <p className="page-intro">The backend did not provide rule contributions for this report.</p>}</Card></section>
     <section className="report-section" aria-labelledby="findings-heading"><div className="section-heading"><div><span className="eyebrow">FINDINGS</span><h2 id="findings-heading">{report.findings.length ? `${report.findings.length} results` : 'No findings'}</h2></div><div className="language-toggle" role="group" aria-label="Explanation language"><button type="button" className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}>English</button><button type="button" className={language === 'hi' ? 'selected' : ''} onClick={() => setLanguage('hi')}>हिन्दी</button></div></div>{report.findings.length ? <div className="finding-grid">{report.findings.map((finding) => <Card className="finding-card" key={finding.ruleId}><div className="finding-heading"><div><span className="eyebrow">{finding.ruleId}</span><h3>{finding.title}</h3></div><Badge tone={findingTone(finding.severity)}>{finding.severity.toUpperCase()}</Badge></div><p>{finding.summary}</p><p className="explanation">{finding.explanations[language] ?? finding.explanations.en ?? 'No explanation is available for this language.'}</p><div className="state-badges"><Badge tone={finding.claimStatus === 'verified' ? 'safe' : finding.claimStatus === 'removed' ? 'warning' : 'schema'}>{finding.claimStatus.toUpperCase()}</Badge></div><button className="text-button" type="button" onClick={() => evidenceForFinding(finding)}>View evidence</button></Card>)}</div> : <Card className="report-placeholder"><EmptyState title="No findings reported" description="The analysis completed without reportable findings." /></Card>}</section>
     {report.capabilityChains.length > 0 && <section className="report-section" aria-labelledby="chains-heading"><div><span className="eyebrow">CAPABILITY CHAINS</span><h2 id="chains-heading">Evidence paths</h2></div><div className="chain-list">{report.capabilityChains.map((chain) => <Card className="chain-card" key={chain.id}><h3>{chain.id} · {chain.label}</h3><div className="chain">{chain.steps.map((step) => <button type="button" className="chain-step" key={step.id} onClick={() => { const finding = report.findings.find((candidate) => candidate.evidence.some((evidence) => evidence.id === step.evidenceId)); if (finding) evidenceForFinding(finding) }} disabled={!step.evidenceId}>{step.label}{step.evidenceId && <small>{step.evidenceId}</small>}</button>)}</div></Card>)}</div></section>}
+    <section className="report-section limitations" aria-labelledby="limitations-heading"><span className="eyebrow">LIMITATIONS</span><h2 id="limitations-heading">What this report cannot prove</h2><ul><li>Static declarations do not prove runtime behavior or how permissions are used.</li><li>A finding is not proof that an app is malware or unsafe.</li><li>The deterministic score is an exposure heuristic, not a security guarantee.</li></ul></section>
     {evidenceFinding && <ReportEvidenceDrawer finding={evidenceFinding} onClose={closeEvidence} />}
   </>
 }
 
-function ReportPage() {
+function ReportPage({ activeReport, onReport }: { activeReport: ReportData | null; onReport: (report: ReportData) => void }) {
   const [status, setStatus] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading')
   const [report, setReport] = useState<ReportData | null>(null)
   useEffect(() => {
+    if (activeReport) {
+      setReport(activeReport)
+      setStatus('ready')
+      return
+    }
     let active = true
     fetch(import.meta.env.VITE_API_REPORT_URL ?? '/api/report')
       .then(async (response) => {
@@ -211,7 +234,9 @@ function ReportPage() {
         if (!response.ok) throw new Error(`Report request failed with status ${response.status}.`)
         let payload: unknown
         try { payload = await response.json() } catch { throw new Error('The report response was not valid JSON.') }
-        return normalizeReport(payload)
+        const result = normalizeReport(payload)
+        if (result) onReport(result)
+        return result
       })
       .then((result) => {
         if (!active) return
@@ -220,7 +245,7 @@ function ReportPage() {
       })
       .catch(() => { if (active) setStatus('error') })
     return () => { active = false }
-  }, [])
+  }, [activeReport, onReport])
   if (status === 'loading') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><LoadingSpinner label="Loading report…" /></Card></main>
   if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The report could not be loaded or was malformed. Try the analysis again." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>
   if (status === 'empty' || !report) return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState icon={reportIcon} title="No report yet" description="A report will appear here after a static analysis run. No security findings are available." action={<div className="empty-actions"><a className="button button-primary" href="/">Go to Analyze</a><a className="text-link" href="/report/sample">View sample report</a></div>} /></Card></main>
@@ -354,12 +379,13 @@ function SampleReportPage() {
 }
 
 function AboutPage() {
-  return <main className="page-content about-page"><span className="eyebrow">ABOUT APK-XRAY</span><h1 className="page-title">Inspect first. Explain carefully.</h1><p className="page-intro">APK-Xray is designed to examine Android APK declarations without executing or installing them. This frontend describes the intended product; the analyzer and backend are not connected yet.</p><section className="about-grid"><Card><Icon name="scan" /><h2>Static-analysis pipeline</h2><p>Upload, extract, apply deterministic rules, score, explain, and verify—once the backend exists.</p></Card><Card><Icon name="shieldCheck" /><h2>Product principles</h2><ul><li>Static only</li><li>Rules decide</li><li>Evidence or it does not appear</li><li>No unsupported intent claims</li><li>Minimal data</li><li>Openness</li></ul></Card><Card><Icon name="limits" /><h2>Privacy and limits</h2><p>The current frontend does not upload or retain APKs. Once implemented, privacy behavior must be documented by the actual backend.</p><p>Static analysis cannot establish runtime behavior, user intent, or that a finding is malware.</p></Card></section></main>
+  return <main className="page-content about-page"><span className="eyebrow">ABOUT APK-XRAY</span><h1 className="page-title">Inspect first. Explain carefully.</h1><p className="page-intro">APK-Xray connects this interface to a static FastAPI analysis backend. APK declarations are inspected without installing or executing the package.</p><section className="about-grid"><Card><Icon name="scan" /><h2>Static-analysis pipeline</h2><p>Upload, read the manifest, apply deterministic rules, calculate exposure, optionally explain supplied evidence, and validate the report.</p></Card><Card><Icon name="shieldCheck" /><h2>Product principles</h2><ul><li>Static only</li><li>Rules decide</li><li>Evidence or it does not appear</li><li>No unsupported intent claims</li><li>Minimal data</li><li>Clear AI status</li></ul></Card><Card><Icon name="limits" /><h2>Privacy and limits</h2><p>Uploaded APKs are handled by the backend for static parsing and are not installed or executed.</p><p>Static analysis cannot establish runtime behavior, user intent, malware status, or complete safety.</p></Card></section></main>
 }
 
 export default function App() {
   const [path, setPath] = useState(validPaths.includes(window.location.pathname) ? window.location.pathname : '/')
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
+  const [report, setReport] = useState<ReportData | null>(null)
   useEffect(() => { const onPopState = () => setPath(validPaths.includes(window.location.pathname) ? window.location.pathname : '/'); window.addEventListener('popstate', onPopState); return () => window.removeEventListener('popstate', onPopState) }, [])
   useEffect(() => {
     document.documentElement.dataset.theme = theme
@@ -369,5 +395,5 @@ export default function App() {
       // The app remains usable when persistence is unavailable.
     }
   }, [theme])
-  return <NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report' ? <ReportPage /> : path === '/report/sample' ? <SampleReportPage /> : path === '/about' ? <AboutPage /> : <AnalyzePage />}<footer className="footer demo-note"><span>LIGHT / DARK THEME · REUSABLE UI FOUNDATION</span><span>STATIC ANALYSIS ONLY</span></footer></div></NavigationLayout>
+  return <NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report' ? <ReportPage activeReport={report} onReport={setReport} /> : path === '/report/sample' ? <SampleReportPage /> : path === '/about' ? <AboutPage /> : <AnalyzePage onReport={setReport} />}<footer className="footer demo-note"><span>STATIC ANALYSIS · EVIDENCE REVIEW</span><span>APKS ARE NEVER EXECUTED</span></footer></div></NavigationLayout>
 }

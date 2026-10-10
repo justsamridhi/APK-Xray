@@ -26,6 +26,7 @@ export interface CapabilityChain {
 }
 
 export interface ReportData {
+  raw: Record<string, unknown>
   app: {
     name: string
     packageName: string
@@ -38,6 +39,11 @@ export interface ReportData {
   }
   findings: ReportFinding[]
   capabilityChains: CapabilityChain[]
+  ai?: {
+    status: 'verified' | 'unavailable' | 'error'
+    provider: string
+    message: string
+  }
 }
 
 const severities = new Set<ReportSeverity>(['low', 'medium', 'high'])
@@ -47,24 +53,20 @@ function text(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value : fallback
 }
 
-function evidenceList(value: unknown): ReportEvidence[] {
-  if (!Array.isArray(value)) return []
-  return value.map((item, index) => {
-    if (typeof item === 'string' && item.trim()) {
-      return { id: `evidence-${index + 1}`, label: item }
-    }
-
-    if (!item || typeof item !== 'object') {
-      return { id: `unavailable-${index + 1}`, label: 'Evidence unavailable' }
-    }
+function evidenceList(value: unknown): ReportEvidence[] | null {
+  if (!Array.isArray(value)) return null
+  const evidence: ReportEvidence[] = []
+  for (const item of value) {
+    if (!item || typeof item !== 'object') return null
     const candidate = item as Record<string, unknown>
-    const id = text(candidate.id, '')
-    return {
-      id: id || `unavailable-${index + 1}`,
-      label: text(candidate.label ?? candidate.type, 'Evidence unavailable'),
+    if (typeof candidate.id !== 'string' || !candidate.id.trim() || typeof candidate.label !== 'string' || !candidate.label.trim() || !['available', 'unavailable'].includes(candidate.availability as string)) return null
+    evidence.push({
+      id: candidate.id,
+      label: candidate.label,
       snippet: typeof candidate.snippet === 'string' ? candidate.snippet : undefined,
-    }
-  })
+    })
+  }
+  return evidence
 }
 
 function explanations(value: unknown): Partial<Record<ReportLanguage, string>> {
@@ -100,26 +102,34 @@ export function normalizeReport(value: unknown): ReportData | null {
   if (!app || typeof app !== 'object' || !score || typeof score !== 'object' || !Array.isArray(raw.findings)) return null
   const rawApp = app as Record<string, unknown>
   const rawScore = score as Record<string, unknown>
-  if (typeof rawScore.value !== 'number' || !Number.isFinite(rawScore.value)) return null
+  if (raw.schemaVersion !== '1.0' || typeof raw.reportId !== 'string' || typeof raw.generatedAt !== 'string') return null
+  if (typeof rawApp.packageName !== 'string' || !rawApp.packageName.trim() || !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(rawApp.packageName) || !('minSdk' in rawApp) || !('targetSdk' in rawApp) || !Array.isArray(rawApp.permissions) || !Array.isArray(rawApp.components)) return null
+  if (typeof rawScore.value !== 'number' || !Number.isFinite(rawScore.value) || rawScore.value < 0 || rawScore.value > 100) return null
+  if (!Array.isArray(rawScore.breakdown) || !Array.isArray(raw.claims) || !['low', 'moderate', 'high', 'very-high'].includes(rawScore.severity as string)) return null
+  if (raw.claims.some((claim) => !claim || typeof claim !== 'object' || typeof (claim as Record<string, unknown>).id !== 'string' || typeof (claim as Record<string, unknown>).text !== 'string' || !['Can', 'Could', 'Cannot Prove'].includes((claim as Record<string, unknown>).classification as string) || !Array.isArray((claim as Record<string, unknown>).evidenceIds) || !['verified', 'removed', 'unsupported', 'unavailable'].includes((claim as Record<string, unknown>).status as string))) return null
   const findings: ReportFinding[] = []
   for (const item of raw.findings) {
     if (!item || typeof item !== 'object') return null
     const finding = item as Record<string, unknown>
     const severity = finding.severity
-    if (typeof finding.ruleId !== 'string' || !severities.has(severity as ReportSeverity)) return null
+    if (typeof finding.ruleId !== 'string' || !severities.has(severity as ReportSeverity) || typeof finding.title !== 'string' || typeof finding.summary !== 'string' || !Array.isArray(finding.evidence) || !claimStatuses.has(finding.claimStatus as ClaimStatus) || !('points' in finding) || !('explanations' in finding)) return null
+    if (!finding.explanations || typeof finding.explanations !== 'object') return null
+    const evidence = evidenceList(finding.evidence)
+    if (!evidence) return null
     const claimStatus = claimStatuses.has(finding.claimStatus as ClaimStatus) ? finding.claimStatus as ClaimStatus : 'unavailable'
     findings.push({
       ruleId: finding.ruleId,
       severity: severity as ReportSeverity,
       title: text(finding.title, 'Untitled finding'),
       summary: text(finding.summary, 'No summary available.'),
-      evidence: evidenceList(finding.evidence),
+      evidence,
       claimStatus,
-      points: typeof finding.points === 'number' && Number.isFinite(finding.points) ? finding.points : null,
+      points: finding.points === null ? null : typeof finding.points === 'number' && Number.isFinite(finding.points) ? finding.points : null,
       explanations: explanations(finding.explanations),
     })
   }
   return {
+    raw,
     app: {
       name: text(rawApp.name, 'Unknown application'),
       packageName: text(rawApp.packageName, 'Package name unavailable'),
@@ -132,5 +142,12 @@ export function normalizeReport(value: unknown): ReportData | null {
     },
     findings,
     capabilityChains: capabilityChains(raw.capabilityChains),
+    ai: raw.ai && typeof raw.ai === 'object' && ['verified', 'unavailable', 'error'].includes((raw.ai as Record<string, unknown>).status as string)
+      ? {
+          status: (raw.ai as Record<string, 'verified' | 'unavailable' | 'error'>).status,
+          provider: text((raw.ai as Record<string, unknown>).provider, 'AI'),
+          message: text((raw.ai as Record<string, unknown>).message, 'AI explanation status unavailable.'),
+        }
+      : undefined,
   }
 }

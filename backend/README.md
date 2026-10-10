@@ -1,97 +1,122 @@
-# Backend integration validation
+# APK-Xray backend
 
-Issue #7 is a validation spike, not a production integration. The harness in
-`validation/validate_integrations.py` checks the two proposed boundaries without
-adding either dependency to the application:
+The backend is a FastAPI service for safe, static APK analysis. It validates
+the upload, reads the APK archive with Androguard, applies deterministic rules,
+optionally requests an evidence-only Gemma explanation, and validates the
+resulting report against `schema/report.schema.json`.
 
-```powershell
-python backend\validation\validate_integrations.py --apk path\to\fixture.apk
-```
+Uploaded APKs are temporary files. The parser never installs, launches, or
+executes an APK.
 
-Use the repository's selected Python interpreter or a disposable virtual
-environment. Androguard is optional for the harness, but is required for the
-APK extraction check:
+## Installation and operation
 
-```powershell
-python -m pip install androguard
-```
-
-The Gemma check is a dry run by default. To exercise a compatible service,
-provide an endpoint explicitly:
+From the repository root, use the selected Python environment:
 
 ```powershell
-$env:GEMMA4_ENDPOINT = "https://your-provider.example/v1/chat/completions"
-$env:GEMMA4_API_KEY = "..."
-python backend\validation\validate_integrations.py --apk path\to\fixture.apk --gemma-endpoint $env:GEMMA4_ENDPOINT
+python -m pip install -r backend\requirements.txt
+python -m uvicorn backend.api:app --reload
 ```
 
-The endpoint must return JSON containing a structured object under `claims`,
-or an explicit `structured_output` object. The harness never sends a request
-unless `--gemma-endpoint` is supplied, never logs the API key, and never stores
-APK contents.
+The service exposes:
 
-## Validation decision record
+- `GET /api/health`
+- `POST /api/upload` with multipart field `file`
+- `GET /api/report`
 
-- **Androguard boundary:** keep it behind a small adapter that returns
-  normalized metadata and permissions. Pin and test the chosen version before
-  production use; parser exceptions must become explicit API errors.
-- **Gemma 4 boundary:** keep the model behind a provider-neutral client that
-  accepts deterministic facts and requires schema-validated JSON. Do not let
-  model output change the score or rule severity.
-- **Runtime:** the repository does not yet mandate a Python version or model
-  runtime. The command records the interpreter version and dependency versions
-  so the decision can be made from observed results.
-- **Open risks:** model endpoint availability and structured-output support,
-  prompt/output size limits, latency, memory usage, sensitive APK metadata
-  handling, and malformed or unsupported model responses.
+Accepted uploads must have an `.apk` extension and an accepted APK or binary
+content type. The default maximum upload size is 50 MiB.
 
-No production dependency is introduced by this spike.
+## Configuration
 
-## Report schema (Issue #8)
+Configuration is read from the process environment by `backend/config.py`.
+The application does not automatically load a `.env` file.
 
-The versioned report contract is
-[`schema/report.schema.json`](schema/report.schema.json). Version `1.0`
-requires stable report and evidence IDs, APK metadata, score information,
-findings, capability chains, and evidence-grounded claims. Finding evidence is
-embedded in each finding so the frontend can render it directly; claim and
-capability steps refer to those stable evidence IDs.
+| Variable | Default | Behavior |
+| --- | --- | --- |
+| `APK_XRAY_MAX_UPLOAD_BYTES` | `52428800` | Positive integer upload limit. |
+| `GEMMA4_ENDPOINT` | unset | Enables the optional Gemma call when non-empty. |
+| `GEMMA4_API_KEY` | unset | Required by the Gemma adapter; never log or commit it. |
+| `APK_XRAY_GEMMA_TIMEOUT` | `90` | Positive timeout in seconds. The adapter retries once on timeout only. |
+| `APK_XRAY_GEMMA_DIAGNOSTICS` | unset | Set to `1` only for redacted live-verifier part diagnostics. |
 
-Validate a report with the validation-only dependency set:
+Copy [`.env.example`](.env.example) as a reference only; environment files
+containing credentials must remain local. If Gemma is not configured, reports
+use `ai.status = "unavailable"`. HTTP, timeout, parsing, contract, and
+validation failures leave the deterministic report available and use
+`ai.status = "error"`. Timeout failures use the safe `gemma_timeout` error code
+in the AI status message.
+
+The deterministic score and rule findings are calculated before Gemma is
+called. Gemma cannot add evidence, change findings, alter severity, or modify
+the score. Its claims must use supplied evidence IDs, and its explanations
+must contain non-empty English (`en`) and Hindi (`hi`) text.
+
+## Tests
+
+Run the full backend suite from the repository root:
 
 ```powershell
-python -m pip install -r backend\requirements-validation.txt
-python backend\validation\validate_report_schema.py backend\validation\fixtures\reports\valid.json
+Set-Location E:\APK-Xray
+$env:PYTHONPATH = "E:\APK-Xray\backend;E:\APK-Xray\backend\parser"
+& E:\APK-Xray\.venv\Scripts\python.exe -m pytest backend -v
 ```
 
-The fixture set includes a valid report, a valid no-findings report, malformed
-JSON-shaped data, and a structurally partial report. Missing evidence is
-represented explicitly with an `unavailable` evidence item rather than by
-silently omitting the reference.
+The shared `backend/conftest.py` fixture removes `GEMMA4_API_KEY` for every
+test. Gemma-dependent tests use mocked HTTP responses and do not contact the
+network. The live verifier is intentionally separate from the test suite.
 
-### Compatibility rules
+## Live Gemma verification
 
-- Producers must emit the exact `schemaVersion` they implement.
-- Consumers must reject unsupported major versions and must not silently
-  reinterpret unknown required fields.
-- New optional fields may be added within version `1.x`; existing fields,
-  enum values, and ID meanings must not change.
-- A breaking field, enum, or meaning change requires a new major schema
-  version and a new schema `$id`.
-- Stable IDs are opaque to consumers and must remain unchanged when the same
-  source fact is re-rendered.
-
-## APK parser (Issue #9)
-
-`parser/apk_parser.py` provides the safe Androguard adapter used by later
-analysis and API work:
+`backend\verify_gemma_live.py` uses synthetic evidence only. It reads
+`GEMMA4_ENDPOINT` and `GEMMA4_API_KEY` from the current process environment,
+calls the real adapter, and validates the returned evidence IDs and
+English/Hindi explanations. Configure credentials locally in the terminal;
+never paste or print the key.
 
 ```powershell
-python -c "from backend.parser import parse_apk; print(parse_apk('path\\to\\app.apk'))"
+Set-Location E:\APK-Xray
+$env:PYTHONPATH = "E:\APK-Xray\backend;E:\APK-Xray\backend\parser"
+$env:APK_XRAY_GEMMA_DIAGNOSTICS = "1"
+& E:\APK-Xray\.venv\Scripts\python.exe backend\verify_gemma_live.py
+Remove-Item Env:APK_XRAY_GEMMA_DIAGNOSTICS
 ```
 
-The parser only validates and reads the APK archive. It never installs,
-executes, or launches the package. It returns normalized `app` metadata plus
-stable evidence records for the package, permissions, and manifest components.
-Missing optional values such as the app label, version, SDK levels, or an
-`exported` attribute are represented as `null`. Invalid, truncated, and
-unsupported inputs raise `ApkParseError` with an actionable message.
+The optional diagnostics print only candidate count, finish reason, part
+metadata, thought-flag state, text lengths, likely JSON presence, and detected
+contract keys. They do not print generated text, API keys, request headers, or
+the full response. This command makes an external API request and is not run by
+the offline tests.
+
+## Deterministic rules
+
+| Rule | Trigger | Points | Severity |
+| --- | --- | ---: | --- |
+| `APKX-NET-001` | `INTERNET` permission | 12 | low |
+| `APKX-SMS-001` | `READ_SMS` or `SEND_SMS` | 25 | high |
+| `APKX-MIC-001` | `RECORD_AUDIO` | 18 | medium |
+| `APKX-LOC-001` | fine/coarse location | 12 | medium |
+| `APKX-EXP-001` | exported component without permission | 20 | high |
+
+The score is the capped sum of matched rule points. No capability-chain
+scoring rule is currently implemented.
+
+## Schema and parser
+
+The authoritative report contract is
+[`schema/report.schema.json`](schema/report.schema.json). Reports are checked
+with JSON Schema validation before the API returns them. The report includes
+stable IDs, app metadata, score information, findings, capability-chain slots,
+claims, and optional AI status.
+
+The parser in `parser/apk_parser.py` validates the ZIP container, extracts
+package metadata, permissions, and manifest components, and emits stable
+evidence IDs. Invalid, truncated, or unsupported inputs become explicit API
+errors.
+
+## Limitations
+
+This is static declaration analysis. It cannot establish runtime behavior,
+malware presence, exploitability, or a complete security assessment. The
+exposure score is deterministic and explainable, but it is not an effectiveness
+or accuracy metric. Gemma availability, response quality, latency, endpoint
+support, and credential configuration remain external dependencies.

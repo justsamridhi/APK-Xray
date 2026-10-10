@@ -144,7 +144,7 @@ export function ResponsiveGrid({ children, className = '' }: { children: ReactNo
 export function UploadPlaceholder() {
   return <div className="upload-row">
     <Icon name="upload" />
-    <div><strong>Select or drop an Android APK file</strong><span>Future upload workflow · static analysis only</span></div>
+    <div><strong>Select or drop an Android APK file</strong><span>Static analysis only · the APK is never executed</span></div>
     <SecondaryButton type="button" disabled>Choose APK</SecondaryButton>
   </div>
 }
