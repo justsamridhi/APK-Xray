@@ -79,3 +79,19 @@ silently omitting the reference.
   version and a new schema `$id`.
 - Stable IDs are opaque to consumers and must remain unchanged when the same
   source fact is re-rendered.
+
+## APK parser (Issue #9)
+
+`parser/apk_parser.py` provides the safe Androguard adapter used by later
+analysis and API work:
+
+```powershell
+python -c "from backend.parser import parse_apk; print(parse_apk('path\\to\\app.apk'))"
+```
+
+The parser only validates and reads the APK archive. It never installs,
+executes, or launches the package. It returns normalized `app` metadata plus
+stable evidence records for the package, permissions, and manifest components.
+Missing optional values such as the app label, version, SDK levels, or an
+`exported` attribute are represented as `null`. Invalid, truncated, and
+unsupported inputs raise `ApkParseError` with an actionable message.
