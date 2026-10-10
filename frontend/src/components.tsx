@@ -1,11 +1,12 @@
 import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from 'react'
+import type { Theme } from './theme'
 import logo from '../../assets/logo.png'
 import analyzeIcon from '../../assets/apk-xray-icons/analyze.svg'
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
 import uploadIcon from '../../assets/apk-xray-icons/upload.svg'
 import './components.css'
 
-export function Header({ currentPath }: { currentPath: string }) {
+export function Header({ currentPath, theme, onThemeToggle }: { currentPath: string; theme: Theme; onThemeToggle: () => void }) {
   return <header className="header" aria-label="Primary navigation">
     <a className="brand" href="/analyze" aria-label="APK X-ray home">
       <img src={logo} alt="APK X-ray" className="brand-logo" />
@@ -15,6 +16,12 @@ export function Header({ currentPath }: { currentPath: string }) {
       <a href="/report" aria-current={currentPath === '/report' ? 'page' : undefined}><img src={reportIcon} alt="" />Report</a>
     </nav>
     <span className="header-status" aria-label="Analysis status">NO ANALYSIS YET</span>
+    <button className="theme-toggle" type="button" onClick={onThemeToggle} aria-label={`Switch to ${theme === 'light' ? 'dark' : 'light'} theme`}>
+      <svg className="theme-toggle-icon" viewBox="0 0 24 24" aria-hidden="true">
+        {theme === 'light' ? <path d="M12 3v2m0 14v2M5.64 5.64l1.42 1.42m9.9 9.9 1.4 1.4M3 12h2m14 0h2M5.64 18.36l1.42-1.42m9.9-9.9 1.4-1.4M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8Z" /> : <path d="M20.5 14.8A8 8 0 0 1 9.2 3.5 8 8 0 1 0 20.5 14.8Z" />}
+      </svg>
+      <span>{theme === 'light' ? 'Dark mode' : 'Light mode'}</span>
+    </button>
   </header>
 }
 

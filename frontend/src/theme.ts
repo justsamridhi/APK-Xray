@@ -32,6 +32,9 @@ export const cssVariables = {
   accentInk: colors.charcoal,
 } as const
 
+export type Theme = 'light' | 'dark'
+export const themeStorageKey = 'apk-xray-theme'
+
 export const typography = {
   headlineXl: { fontFamily: 'Space Grotesk', fontSize: '40px', fontWeight: 600, lineHeight: '48px', letterSpacing: '-0.03em' },
   headlineXlMobile: { fontFamily: 'Space Grotesk', fontSize: '28px', fontWeight: 600, lineHeight: '36px', letterSpacing: '-0.02em' },

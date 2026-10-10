@@ -1,7 +1,18 @@
 import { useEffect, useState } from 'react'
 import { Badge, Card, EmptyState, Header, UploadPlaceholder } from './components'
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
+import { themeStorageKey, type Theme } from './theme'
 import './styles.css'
+
+function getInitialTheme(): Theme {
+  try {
+    const saved = localStorage.getItem(themeStorageKey)
+    if (saved === 'dark' || saved === 'light') return saved
+  } catch {
+    // Storage may be unavailable in private browsing or a restricted environment.
+  }
+  return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+}
 
 function AnalyzePage() {
   return <main className="page-content">
@@ -19,6 +30,15 @@ function ReportPage() {
 
 export default function App() {
   const [path, setPath] = useState(window.location.pathname === '/report' ? '/report' : '/analyze')
+  const [theme, setTheme] = useState<Theme>(getInitialTheme)
   useEffect(() => { const onPopState = () => setPath(window.location.pathname === '/report' ? '/report' : '/analyze'); window.addEventListener('popstate', onPopState); return () => window.removeEventListener('popstate', onPopState) }, [])
-  return <div className="app-shell"><div className="shell"><Header currentPath={path} />{path === '/report' ? <ReportPage /> : <AnalyzePage />}<footer className="footer demo-note"><span>LIGHT THEME · REUSABLE UI FOUNDATION</span><span>STATIC ANALYSIS ONLY</span></footer></div></div>
+  useEffect(() => {
+    document.documentElement.dataset.theme = theme
+    try {
+      localStorage.setItem(themeStorageKey, theme)
+    } catch {
+      // The app remains usable when persistence is unavailable.
+    }
+  }, [theme])
+  return <div className="app-shell"><div className="shell"><Header currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')} />{path === '/report' ? <ReportPage /> : <AnalyzePage />}<footer className="footer demo-note"><span>LIGHT / DARK THEME · REUSABLE UI FOUNDATION</span><span>STATIC ANALYSIS ONLY</span></footer></div></div>
 }
