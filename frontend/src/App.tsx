@@ -3,6 +3,7 @@ import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, Primar
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
 import { themeStorageKey, type Theme } from './theme'
 import { sampleReport, type SampleFinding } from './sampleReport'
+import { normalizeReport, type ReportData, type ReportFinding } from './report'
 import './styles.css'
 
 const validPaths: string[] = ['/', '/analyze', '/report', '/report/sample', '/about']
@@ -134,8 +135,68 @@ function AnalyzePage() {
   </main>
 }
 
+function findingTone(severity: ReportFinding['severity']) {
+  return severity === 'high' ? 'warning' : severity === 'medium' ? 'scan' : 'safe'
+}
+
+function ReportEvidenceDrawer({ finding, onClose }: { finding: ReportFinding; onClose: () => void }) {
+  const drawerRef = useRef<HTMLElement>(null)
+  useEffect(() => {
+    drawerRef.current?.querySelector<HTMLButtonElement>('button')?.focus()
+    const onKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.key === 'Escape') onClose()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [onClose])
+  return <div className="evidence-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
+    <aside ref={drawerRef} className="evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="evidence-heading">
+      <button className="drawer-close" type="button" onClick={onClose} aria-label="Close evidence"><Icon name="close" /></button>
+      <span className="eyebrow">EVIDENCE</span>
+      <h2 id="evidence-heading">{finding.ruleId}</h2>
+      <p>{finding.summary}</p>
+      <div className="evidence-list">
+        {finding.evidence.length === 0 ? <p className="evidence-unavailable">Evidence unavailable</p> : finding.evidence.map((evidence) => <article className="evidence-item" key={evidence.id}><strong>{evidence.id}</strong><span>{evidence.label}</span>{evidence.snippet && <code>{evidence.snippet}</code>}</article>)}
+      </div>
+    </aside>
+  </div>
+}
+
+function ReportFindingCard({ finding, onEvidence }: { finding: ReportFinding; onEvidence: () => void }) {
+  return <Card className="finding-card"><div className="finding-heading"><div><span className="eyebrow">{finding.ruleId}</span><h3>{finding.title}</h3></div><Badge tone={findingTone(finding.severity)}>{finding.severity.toUpperCase()}</Badge></div><p>{finding.summary}</p><div className="state-badges"><Badge tone={finding.claimStatus === 'verified' ? 'safe' : finding.claimStatus === 'removed' ? 'warning' : 'schema'}>{finding.claimStatus.toUpperCase()}</Badge></div><button className="text-button" type="button" onClick={onEvidence}>View evidence</button></Card>
+}
+
+function ReportContent({ report }: { report: ReportData }) {
+  const [evidenceFinding, setEvidenceFinding] = useState<ReportFinding | null>(null)
+  const closeEvidence = useCallback(() => setEvidenceFinding(null), [])
+  return <><div className="report-summary"><div><span className="eyebrow">ANALYSIS REPORT</span><h1 className="page-title">{report.app.name}</h1><p className="page-intro">{report.app.packageName} · version {report.app.version}</p></div><div className="report-score"><span className="eyebrow">EXPOSURE SCORE</span><strong>{report.score.value}</strong><Badge tone={report.score.value >= 70 ? 'warning' : report.score.value >= 35 ? 'scan' : 'safe'}>{report.score.label}</Badge></div></div><section className="report-section" aria-labelledby="findings-heading"><div className="section-heading"><div><span className="eyebrow">FINDINGS</span><h2 id="findings-heading">{report.findings.length ? `${report.findings.length} results` : 'No findings'}</h2></div></div>{report.findings.length ? <div className="finding-grid">{report.findings.map((finding) => <ReportFindingCard key={finding.ruleId} finding={finding} onEvidence={() => setEvidenceFinding(finding)} />)}</div> : <Card className="report-placeholder"><EmptyState title="No findings reported" description="The analysis completed without reportable findings." /></Card>}</section>{evidenceFinding && <ReportEvidenceDrawer finding={evidenceFinding} onClose={closeEvidence} />}</>
+}
+
 function ReportPage() {
-  return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState icon={reportIcon} title="No report yet" description="A report will appear here after a future static analysis run. No security findings are available." action={<div className="empty-actions"><a className="button button-primary" href="/">Go to Analyze</a><a className="text-link" href="/report/sample">View sample report</a></div>} /></Card></main>
+  const [status, setStatus] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading')
+  const [report, setReport] = useState<ReportData | null>(null)
+  useEffect(() => {
+    let active = true
+    fetch(import.meta.env.VITE_API_REPORT_URL ?? '/api/report')
+      .then(async (response) => {
+        if (response.status === 404) return null
+        if (!response.ok) throw new Error(`Report request failed with status ${response.status}.`)
+        let payload: unknown
+        try { payload = await response.json() } catch { throw new Error('The report response was not valid JSON.') }
+        return normalizeReport(payload)
+      })
+      .then((result) => {
+        if (!active) return
+        if (!result) setStatus('empty')
+        else { setReport(result); setStatus('ready') }
+      })
+      .catch(() => { if (active) setStatus('error') })
+    return () => { active = false }
+  }, [])
+  if (status === 'loading') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><LoadingSpinner label="Loading report…" /></Card></main>
+  if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The report could not be loaded or was malformed. Try the analysis again." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>
+  if (status === 'empty' || !report) return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState icon={reportIcon} title="No report yet" description="A report will appear here after a static analysis run. No security findings are available." action={<div className="empty-actions"><a className="button button-primary" href="/">Go to Analyze</a><a className="text-link" href="/report/sample">View sample report</a></div>} /></Card></main>
+  return <main className="page-content"><ReportContent report={report} /></main>
 }
 
 function FindingCard({ finding, onEvidence, evidenceLabel, severityLabel }: { finding: SampleFinding; onEvidence: (trigger: HTMLButtonElement) => void; evidenceLabel: string; severityLabel: string }) {
