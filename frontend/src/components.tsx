@@ -3,19 +3,18 @@ import logo from '../../assets/logo.png'
 import analyzeIcon from '../../assets/apk-xray-icons/analyze.svg'
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
 import uploadIcon from '../../assets/apk-xray-icons/upload.svg'
-import { colors } from './theme'
 import './components.css'
 
 export function Header({ currentPath }: { currentPath: string }) {
   return <header className="header" aria-label="Primary navigation">
     <a className="brand" href="/analyze" aria-label="APK X-ray home">
-      <img src={logo} alt="" className="brand-logo" /><span>APK <strong>X-RAY</strong></span>
+      <img src={logo} alt="APK X-ray" className="brand-logo" />
     </a>
     <nav className="nav-tabs">
       <a href="/analyze" aria-current={currentPath === '/analyze' ? 'page' : undefined}><img src={analyzeIcon} alt="" />Analyze</a>
       <a href="/report" aria-current={currentPath === '/report' ? 'page' : undefined}><img src={reportIcon} alt="" />Report</a>
     </nav>
-    <span className="header-status" aria-label="Static analysis engine status">STATIC_ENGINE</span>
+    <span className="header-status" aria-label="Analysis status">NO ANALYSIS YET</span>
   </header>
 }
 
@@ -40,8 +39,8 @@ export function LoadingSpinner({ label = 'Loading' }: { label?: string }) {
   return <span className="spinner-wrap" role="status"><span className="spinner" aria-hidden="true" />{label}</span>
 }
 
-export function EmptyState({ title, description, action }: { title: string; description: string; action?: ReactNode }) {
-  return <div className="empty-state"><div className="empty-icon" aria-hidden="true">—</div><h2>{title}</h2><p>{description}</p>{action}</div>
+export function EmptyState({ title, description, icon, action }: { title: string; description: string; icon?: string; action?: ReactNode }) {
+  return <div className="empty-state">{icon && <img className="empty-icon" src={icon} alt="" /> }<h2>{title}</h2><p>{description}</p>{action}</div>
 }
 
 export function ResponsiveGrid({ children, className = '' }: { children: ReactNode; className?: string }) {
@@ -55,5 +54,3 @@ export function UploadPlaceholder() {
     <SecondaryButton type="button" disabled>Choose APK</SecondaryButton>
   </div>
 }
-
-export const tokenPreview = { paper: colors.paper }

@@ -7,13 +7,13 @@ describe('application routes', () => {
     window.history.replaceState({}, '', '/analyze')
     render(<App />)
     expect(screen.getByRole('heading', { name: /evidence-first android static analysis/i })).toBeInTheDocument()
-    expect(screen.getByText(/demo data: no apk is uploaded/i)).toBeInTheDocument()
+    expect(screen.getByText(/no apk has been uploaded or analyzed/i)).toBeInTheDocument()
   })
 
   it('renders the report placeholder', () => {
     window.history.replaceState({}, '', '/report')
     render(<App />)
     expect(screen.getByRole('heading', { name: 'Analysis report' })).toBeInTheDocument()
-    expect(screen.getByText(/no report available/i)).toBeInTheDocument()
+    expect(screen.getByText(/no report yet/i)).toBeInTheDocument()
   })
 })

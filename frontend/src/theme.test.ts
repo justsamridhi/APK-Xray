@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { borders, breakpoints, colors, radii, shadows, spacing, typography } from './theme'
+import { borders, breakpoints, colors, cssVariables, radii, shadows, spacing, typography } from './theme'
 
 describe('light design tokens', () => {
   it('exports the palette from DESIGN.md', () => {
@@ -10,6 +10,9 @@ describe('light design tokens', () => {
     expect(colors.lavender).toBe('#E5E0F4')
     expect(colors.peach).toBe('#F9DFD5')
     expect(colors.sky).toBe('#D9EBF5')
+    expect(cssVariables.background).toBe(colors.paper)
+    expect(cssVariables.surface).toBe(colors.white)
+    expect(cssVariables.muted).toBe(colors.inkMuted)
   })
   it('exports the documented type and layout scales', () => {
     expect(typography.headlineXl.fontFamily).toBe('Space Grotesk')

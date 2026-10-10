@@ -17,6 +17,21 @@ export const colors = {
   charcoal: '#1B1C20',
 } as const
 
+export const cssVariables = {
+  background: colors.paper,
+  surface: colors.white,
+  surfaceMuted: colors.ecru,
+  text: colors.ink,
+  textSecondary: colors.inkSecondary,
+  muted: colors.inkMuted,
+  border: colors.border,
+  accentMint: colors.mint,
+  accentLavender: colors.lavender,
+  accentPeach: colors.peach,
+  accentSky: colors.sky,
+  accentInk: colors.charcoal,
+} as const
+
 export const typography = {
   headlineXl: { fontFamily: 'Space Grotesk', fontSize: '40px', fontWeight: 600, lineHeight: '48px', letterSpacing: '-0.03em' },
   headlineXlMobile: { fontFamily: 'Space Grotesk', fontSize: '28px', fontWeight: 600, lineHeight: '36px', letterSpacing: '-0.02em' },
