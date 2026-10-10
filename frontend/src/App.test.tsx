@@ -1,9 +1,13 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import App from './App'
 
 describe('application routes', () => {
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
   it('renders the analyze page at the root route', () => {
     window.history.replaceState({}, '', '/')
     render(<App />)
@@ -11,12 +15,32 @@ describe('application routes', () => {
     expect(screen.getAllByRole('link', { name: 'Analyze' })[0]).toHaveAttribute('href', '/')
   })
 
-  it('renders the analyze shell', () => {
+  it('renders the analyze upload flow', () => {
     window.history.replaceState({}, '', '/analyze')
     render(<App />)
     expect(screen.getByRole('heading', { name: /evidence-first android static analysis/i })).toBeInTheDocument()
-    expect(screen.getByText(/no apk has been uploaded or analyzed/i)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Choose APK' })).toBeDisabled()
+    expect(screen.getByText(/maximum size 50 mb/i)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Start analysis' })).toBeDisabled()
+  })
+
+  it('validates APK type before upload', () => {
+    window.history.replaceState({}, '', '/analyze')
+    render(<App />)
+    fireEvent.change(screen.getByLabelText('Choose APK file'), { target: { files: [new File(['not an apk'], 'notes.txt', { type: 'text/plain' })] } })
+    expect(screen.getByRole('alert')).toHaveTextContent(/android apk file/i)
+    expect(screen.getByRole('button', { name: 'Start analysis' })).toBeDisabled()
+  })
+
+  it('uploads a valid APK and navigates to the report', async () => {
+    window.history.replaceState({}, '', '/analyze')
+    const user = userEvent.setup()
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', { status: 200 })))
+    render(<App />)
+    await user.upload(screen.getByLabelText('Choose APK file'), new File(['apk bytes'], 'sample.apk', { type: 'application/vnd.android.package-archive' }))
+    expect(screen.getByRole('button', { name: 'Start analysis' })).toBeEnabled()
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    expect(await screen.findByRole('heading', { name: 'Analysis report' })).toBeInTheDocument()
+    expect(fetch).toHaveBeenCalledWith('/api/upload', expect.objectContaining({ method: 'POST' }))
   })
 
   it('renders the report placeholder', () => {
