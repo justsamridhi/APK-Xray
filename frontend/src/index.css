@@ -1,0 +1,61 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600&family=Hanken+Grotesk:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap');
+
+:root {
+  /* Light theme tokens */
+  --color-background: #F4F3EF; /* warm paper */
+  --color-surface: #FFFFFF;   /* cards */
+  --color-border: #DFDCD5;
+  --color-primary: #121316; /* ink */
+  --color-primary-ink: #FFFFFF;
+  --color-mint: #CDE9DC;
+  --color-mint-ink: #1B4332;
+  --color-lavender: #E5E0F4;
+  --color-lavender-ink: #3A2D54;
+  --color-peach: #F9DFD5;
+  --color-peach-ink: #5C2818;
+  --color-sky: #D9EBF5;
+  --color-sky-ink: #1B3B4B;
+  --color-ink-muted: #5A606A;
+  --color-ink-secondary: #2A2E35;
+  --color-ink-charcoal: #1B1C20;
+  /* Shadows */
+  --shadow-card: 0 4px 16px -2px rgba(18,19,22,0.04), 0 1px 3px 0 rgba(18,19,22,0.02);
+  --shadow-raised: 0 12px 36px -4px rgba(18,19,22,0.06), 0 2px 8px -1px rgba(18,19,22,0.03);
+  --focus-ring: 0 0 0 3px rgba(205,233,220,0.55);
+}
+
+[data-theme='dark'] {
+  /* Dark theme tokens */
+  --color-background: #121316; /* midnight ink background */
+  --color-surface: #1B1C20;   /* dark surface */
+  --color-border: #5A606A;
+  --color-primary: #F4F3EF; /* light ink */
+  --color-primary-ink: #121316;
+  --color-mint: #1B4332;
+  --color-mint-ink: #CDE9DC;
+  --color-lavender: #3A2D54;
+  --color-lavender-ink: #E5E0F4;
+  --color-peach: #5C2818;
+  --color-peach-ink: #F9DFD5;
+  --color-sky: #1B3B4B;
+  --color-sky-ink: #D9EBF5;
+  --color-ink-muted: #E3E2DF;
+  --color-ink-secondary: #ECEAE4;
+  --color-ink-charcoal: #FFFFFF;
+}
+
+html, body, #root {
+  margin: 0;
+  padding: 0;
+  height: 100%;
+  font-family: 'Hanken Grotesk', sans-serif;
+  background: var(--color-background);
+  color: var(--color-primary);
+}
+
+* { box-sizing: border-box; }
+
+:focus-visible {
+  outline: 2px solid var(--color-mint);
+  outline-offset: 2px;
+}

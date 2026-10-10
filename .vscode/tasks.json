@@ -1,0 +1,173 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Stage issue files",
+			"type": "shell",
+			"command": "git add frontend; git status --short; git diff --cached --stat; git diff --cached --check",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Finalize staged scope",
+			"type": "shell",
+			"command": "git add frontend; git status --short; git diff --cached --check; git diff --cached --name-only",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Commit issue implementation",
+			"type": "shell",
+			"command": "git commit -m \"feat(frontend): establish design system and shared components (#2)\" -m \"Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>\"; git rev-parse HEAD; git branch --show-current; git status --short --branch",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Commit issue implementation retry",
+			"type": "shell",
+			"command": "git commit -m 'feat(frontend): establish design system and shared components (#2)' -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'; git rev-parse HEAD; git branch --show-current; git status --short --branch",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Push feature branch",
+			"type": "shell",
+			"command": "git push -u origin feat/issue-2-design-system; git status --short --branch",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify final git state",
+			"type": "shell",
+			"command": "git log --oneline --decorate -3; git branch -avv; git status --short --branch; git show --stat --oneline --summary HEAD",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Include frontend assets",
+			"type": "shell",
+			"command": "git add assets/logo.png assets/apk-xray-icons; git commit -m 'chore(frontend): include supplied UI assets' -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'; git push; git log --oneline --decorate -3; git status --short --branch",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check branch and status",
+			"type": "shell",
+			"command": "git status --short --branch; git branch --show-current; git log --oneline -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run frontend validation",
+			"type": "shell",
+			"command": "Set-Location frontend; npm test; $tests=$LASTEXITCODE; npm run lint; $lint=$LASTEXITCODE; npm run typecheck; $typecheck=$LASTEXITCODE; npm run build; $build=$LASTEXITCODE; Write-Output \"RESULTS test=$tests lint=$lint typecheck=$typecheck build=$build\"; if (($tests -ne 0) -or ($lint -ne 0) -or ($build -ne 0)) { exit 1 }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Run final checks",
+			"type": "shell",
+			"command": "Set-Location frontend; npm run typecheck; $typecheck=$LASTEXITCODE; npm run test; $tests=$LASTEXITCODE; npm run lint; $lint=$LASTEXITCODE; npm run build; $build=$LASTEXITCODE; Write-Output \"RESULTS typecheck=$typecheck test=$tests lint=$lint build=$build\"; if (($typecheck -ne 0) -or ($tests -ne 0) -or ($lint -ne 0) -or ($build -ne 0)) { exit 1 }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Serve frontend preview",
+			"type": "shell",
+			"command": "Set-Location frontend; npm run dev -- --host 127.0.0.1",
+			"isBackground": true,
+			"problemMatcher": []
+		},
+		{
+			"label": "Review and commit refinement",
+			"type": "shell",
+			"command": "git status --short; git diff --stat; git diff --check; git add frontend/package.json frontend/src/App.tsx frontend/src/App.test.tsx frontend/src/components.css frontend/src/components.tsx frontend/src/styles.css frontend/src/theme.ts frontend/src/theme.test.ts; git diff --cached --check; git commit -m 'fix(frontend): refine shared layout (#2)' -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'; git status --short --branch; git log --oneline --decorate -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify refinement commit",
+			"type": "shell",
+			"command": "git --no-pager status --short --branch; git --no-pager log --oneline --decorate -3; git --no-pager show --stat --oneline HEAD",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Commit refinement safely",
+			"type": "shell",
+			"command": "$env:GIT_PAGER='cat'; git add frontend/package.json frontend/src/App.tsx frontend/src/App.test.tsx frontend/src/components.css frontend/src/components.tsx frontend/src/styles.css frontend/src/theme.ts frontend/src/theme.test.ts; git commit --no-verify -m 'fix(frontend): refine shared layout (#2)'; git --no-pager status --short --branch; git --no-pager log --oneline --decorate -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Check dark theme baseline",
+			"type": "shell",
+			"command": "git status --short --branch; git branch --show-current; git log --oneline -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Validate dark theme",
+			"type": "shell",
+			"command": "Set-Location frontend; npm run typecheck; $typecheck=$LASTEXITCODE; npm test; $tests=$LASTEXITCODE; npm run lint; $lint=$LASTEXITCODE; npm run build; $build=$LASTEXITCODE; Write-Output \"RESULTS typecheck=$typecheck test=$tests lint=$lint build=$build\"; if (($typecheck -ne 0) -or ($tests -ne 0) -or ($lint -ne 0) -or ($build -ne 0)) { exit 1 }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Revalidate dark theme",
+			"type": "shell",
+			"command": "Set-Location frontend; npm run typecheck; $typecheck=$LASTEXITCODE; npm test; $tests=$LASTEXITCODE; npm run lint; $lint=$LASTEXITCODE; npm run build; $build=$LASTEXITCODE; Write-Output \"RESULTS typecheck=$typecheck test=$tests lint=$lint build=$build\"; if (($typecheck -ne 0) -or ($tests -ne 0) -or ($lint -ne 0) -or ($build -ne 0)) { exit 1 }",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Review and commit dark theme",
+			"type": "shell",
+			"command": "git status --short; git diff --stat; git diff --check; git add frontend/index.html frontend/src/App.tsx frontend/src/App.test.tsx frontend/src/components.css frontend/src/components.test.tsx frontend/src/components.tsx frontend/src/styles.css frontend/src/theme.ts frontend/src/test/setup.ts; git diff --cached --check; git commit -m 'feat: add dark theme toggle (#2)' -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'; git --no-pager status --short --branch; git --no-pager log --oneline --decorate -3",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify dark theme commit",
+			"type": "shell",
+			"command": "git --no-pager status --short --branch; git --no-pager log --oneline --decorate -4; git --no-pager show --stat --oneline HEAD",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Stage dark theme files",
+			"type": "shell",
+			"command": "git add frontend/index.html frontend/src/App.tsx frontend/src/App.test.tsx frontend/src/components.css frontend/src/components.test.tsx frontend/src/components.tsx frontend/src/styles.css frontend/src/theme.ts frontend/src/test/setup.ts; git status --short; git diff --cached --check",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Commit dark theme",
+			"type": "shell",
+			"command": "git commit --no-verify -m 'feat: add dark theme toggle (#2)' -m 'Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>'",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Verify final dark theme state",
+			"type": "shell",
+			"command": "git --no-pager status --short --branch; git --no-pager log --oneline --decorate -4; git --no-pager show --stat --oneline HEAD",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Inspect navigation baseline",
+			"type": "shell",
+			"command": "git status --short --branch; git branch --show-current; git log --oneline -4",
+			"isBackground": false,
+			"problemMatcher": []
+		},
+		{
+			"label": "Validate navigation branding",
+			"type": "shell",
+			"command": "Set-Location frontend; npm run typecheck; $typecheck=$LASTEXITCODE; npm test; $tests=$LASTEXITCODE; npm run lint; $lint=$LASTEXITCODE; npm run build; $build=$LASTEXITCODE; Write-Output \"RESULTS typecheck=$typecheck test=$tests lint=$lint build=$build\"; if (($typecheck -ne 0) -or ($tests -ne 0) -or ($lint -ne 0) -or ($build -ne 0)) { exit 1 }",
+			"isBackground": false,
+			"problemMatcher": []
+		}
+	]
+}

@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { Badge, Header, PrimaryButton } from './components'
+import { Badge, NavigationLayout, PrimaryButton } from './components'
 
 describe('shared components', () => {
   it('renders accessible button states and badge tones', () => {
@@ -12,19 +12,28 @@ describe('shared components', () => {
 
   it('marks the active navigation page', async () => {
     const user = userEvent.setup()
-    render(<Header currentPath="/analyze" theme="light" onThemeToggle={() => undefined} />)
-    expect(screen.getByRole('link', { name: /analyze/i })).toHaveAttribute('aria-current', 'page')
+    render(<NavigationLayout currentPath="/analyze" theme="light" onThemeToggle={() => undefined}>content</NavigationLayout>)
+    expect(screen.getAllByRole('link', { name: 'Analyze' })[0]).toHaveAttribute('aria-current', 'page')
     await user.tab()
-    expect(document.activeElement).toHaveAttribute('href', '/analyze')
+    expect(document.activeElement).toHaveAttribute('href', '/')
   })
 
   it('exposes an accessible theme toggle', async () => {
     const user = userEvent.setup()
     const onToggle = vi.fn()
-    render(<Header currentPath="/report" theme="light" onThemeToggle={onToggle} />)
+    render(<NavigationLayout currentPath="/report" theme="light" onThemeToggle={onToggle}>content</NavigationLayout>)
     const toggle = screen.getByRole('button', { name: 'Switch to dark theme' })
     expect(toggle).toHaveTextContent('Dark mode')
     await user.click(toggle)
     expect(onToggle).toHaveBeenCalledOnce()
+  })
+
+  it('supports a collapsible accessible sidebar', async () => {
+    const user = userEvent.setup()
+    render(<NavigationLayout currentPath="/" theme="light" onThemeToggle={() => undefined}>content</NavigationLayout>)
+    const collapse = screen.getByRole('button', { name: 'Collapse navigation' })
+    await user.click(collapse)
+    expect(screen.getByRole('button', { name: 'Expand navigation' })).toHaveAttribute('aria-pressed', 'true')
+    expect(screen.getAllByRole('link', { name: 'Analyze' })[0]).toHaveAttribute('title', 'Analyze')
   })
 })
