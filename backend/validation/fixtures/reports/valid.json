@@ -72,7 +72,10 @@
   "claims": [
     {
       "id": "claim:network-001",
-      "text": "The app can access the network.",
+      "text": {
+        "en": "The app can access the network.",
+        "hi": "ऐप नेटवर्क तक पहुंच सकता है।"
+      },
       "classification": "Can",
       "evidenceIds": [
         "manifest:permission:internet"

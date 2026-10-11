@@ -17,7 +17,7 @@ def build_report(facts: dict[str, Any], gemma: Callable[[dict[str, Any]], dict[s
     claims = [
         {
             "id": f"claim:{finding['ruleId']}",
-            "text": finding["summary"],
+            "text": {"en": finding["summary"], "hi": finding["summary"]},
             "classification": "Can",
             "evidenceIds": [item["id"] for item in finding["evidence"]],
             "status": "verified",
@@ -38,7 +38,18 @@ def build_report(facts: dict[str, Any], gemma: Callable[[dict[str, Any]], dict[s
     if gemma:
         try:
             result = gemma(facts)
-            report["claims"] = result["claims"]
+            # Merge AI claims into the report, avoiding duplicate IDs
+            existing_claim_ids = {c.get("id") for c in report["claims"] if "id" in c}
+            for claim in result.get("claims", []):
+                if not isinstance(claim, dict):
+                    continue
+                claim_id = claim.get("id")
+                if not claim_id:
+                    continue  # skip malformed claim without ID
+                if claim_id not in existing_claim_ids:
+                    report["claims"].append(claim)
+                    existing_claim_ids.add(claim_id)
+            # Attach AI explanations to each finding (could be refined per claim)
             for finding in report["findings"]:
                 finding["explanations"] = result["explanations"]
             report["ai"] = {"status": "verified", "provider": "Gemma 4", "message": "Evidence-grounded AI explanation verified against supplied evidence."}

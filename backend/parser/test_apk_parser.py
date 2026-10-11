@@ -1,10 +1,11 @@
 import tempfile
 import unittest
 import zipfile
+from xml.etree import ElementTree
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from apk_parser import ApkParseError, parse_apk
+from apk_parser import ANDROID_NS, ApkParseError, _component_facts, parse_apk
 
 
 class ApkParserTests(unittest.TestCase):
@@ -42,7 +43,7 @@ class ApkParserTests(unittest.TestCase):
         self.assertIsNone(first["app"]["name"])
         self.assertIsNone(first["app"]["version"])
         self.assertEqual(first["app"]["targetSdk"], 35)
-        self.assertEqual(first["app"]["components"][0]["exported"], None)
+        self.assertFalse(first["app"]["components"][0]["exported"])
         self.assertEqual(first["evidence"][0]["id"], "manifest:package")
 
     def test_wraps_parser_failures_with_actionable_error(self) -> None:
@@ -55,6 +56,39 @@ class ApkParserTests(unittest.TestCase):
             with patch("androguard.core.apk.APK", return_value=fake_apk):
                 with self.assertRaisesRegex(ApkParseError, "Unable to parse APK manifest"):
                     parse_apk(apk_path)
+
+    def test_derives_exported_defaults_and_inherited_permissions(self) -> None:
+        manifest = ElementTree.fromstring(
+            f'''<manifest xmlns:android="{ANDROID_NS}"><application android:permission="org.example.GUARD">
+                <activity android:name="Explicit" android:exported="false"><intent-filter /></activity>
+                <activity android:name="Implicit"><intent-filter /></activity>
+                <service android:name="Private" />
+                <provider android:name="LegacyProvider" />
+            </application></manifest>'''
+        )
+        apk = Mock()
+        apk.get_activities.return_value = ["Explicit", "Implicit"]
+        apk.get_services.return_value = ["Private"]
+        apk.get_receivers.return_value = []
+        apk.get_providers.return_value = ["LegacyProvider"]
+        components, _ = _component_facts(apk, manifest, 16)
+        by_name = {component["name"]: component for component in components}
+        self.assertFalse(by_name["Explicit"]["exported"])
+        self.assertTrue(by_name["Implicit"]["exported"])
+        self.assertFalse(by_name["Private"]["exported"])
+        self.assertTrue(by_name["LegacyProvider"]["exported"])
+        self.assertEqual(by_name["Implicit"]["permission"], "org.example.GUARD")
+        self.assertEqual(by_name["Implicit"]["permissionSource"], "application")
+
+    def test_provider_default_is_unknown_without_target_sdk(self) -> None:
+        manifest = ElementTree.fromstring(f'<manifest xmlns:android="{ANDROID_NS}"><application><provider android:name="Provider" /></application></manifest>')
+        apk = Mock()
+        apk.get_activities.return_value = []
+        apk.get_services.return_value = []
+        apk.get_receivers.return_value = []
+        apk.get_providers.return_value = ["Provider"]
+        components, _ = _component_facts(apk, manifest, None)
+        self.assertIsNone(components[0]["exported"])
 
 
 if __name__ == "__main__":

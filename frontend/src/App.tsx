@@ -3,7 +3,7 @@ import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, Primar
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
 import { themeStorageKey, type Theme } from './theme'
 import { sampleReport, type SampleFinding } from './sampleReport'
-import { normalizeReport, type ReportData, type ReportFinding, type ReportLanguage } from './report'
+import { type ReportData, type ReportFinding, type ReportLanguage } from './report'
 import { maxApkSize, upload, UploadError } from './api'
 import './styles.css'
 
@@ -227,24 +227,8 @@ function ReportPage({ activeReport, onReport }: { activeReport: ReportData | nul
       setStatus('ready')
       return
     }
-    let active = true
-    fetch(import.meta.env.VITE_API_REPORT_URL ?? '/api/report')
-      .then(async (response) => {
-        if (response.status === 404) return null
-        if (!response.ok) throw new Error(`Report request failed with status ${response.status}.`)
-        let payload: unknown
-        try { payload = await response.json() } catch { throw new Error('The report response was not valid JSON.') }
-        const result = normalizeReport(payload)
-        if (result) onReport(result)
-        return result
-      })
-      .then((result) => {
-        if (!active) return
-        if (!result) setStatus('empty')
-        else { setReport(result); setStatus('ready') }
-      })
-      .catch(() => { if (active) setStatus('error') })
-    return () => { active = false }
+    setReport(null)
+    setStatus('empty')
   }, [activeReport, onReport])
   if (status === 'loading') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><LoadingSpinner label="Loading report…" /></Card></main>
   if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The report could not be loaded or was malformed. Try the analysis again." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>

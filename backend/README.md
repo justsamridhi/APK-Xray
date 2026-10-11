@@ -21,10 +21,11 @@ The service exposes:
 
 - `GET /api/health`
 - `POST /api/upload` with multipart field `file`
-- `GET /api/report`
 
 Accepted uploads must have an `.apk` extension and an accepted APK or binary
-content type. The default maximum upload size is 50 MiB.
+content type. The default maximum upload size is 50 MiB. ZIP metadata is
+validated before parsing: unsafe paths, entry count, expanded-size, and
+compression-ratio limits are rejected without extracting the archive.
 
 ## Configuration
 
@@ -34,6 +35,10 @@ The application does not automatically load a `.env` file.
 | Variable | Default | Behavior |
 | --- | --- | --- |
 | `APK_XRAY_MAX_UPLOAD_BYTES` | `52428800` | Positive integer upload limit. |
+| `APK_XRAY_MAX_ZIP_ENTRIES` | `1000` | Maximum ZIP entries accepted before parsing. |
+| `APK_XRAY_MAX_TOTAL_UNCOMPRESSED_BYTES` | `209715200` | Maximum combined expanded ZIP-entry size. |
+| `APK_XRAY_MAX_ENTRY_UNCOMPRESSED_BYTES` | `52428800` | Maximum expanded size of one ZIP entry. |
+| `APK_XRAY_MAX_COMPRESSION_RATIO` | `100` | Maximum expanded-to-compressed ratio for an entry or archive. |
 | `GEMMA4_ENDPOINT` | unset | Enables the optional Gemma call when non-empty. |
 | `GEMMA4_API_KEY` | unset | Required by the Gemma adapter; never log or commit it. |
 | `APK_XRAY_GEMMA_TIMEOUT` | `90` | Positive timeout in seconds. The adapter retries once on timeout only. |

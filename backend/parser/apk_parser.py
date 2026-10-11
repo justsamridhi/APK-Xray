@@ -62,9 +62,13 @@ def _manifest_elements(manifest: Any, local_name: str) -> Iterable[Any]:
     )
 
 
-def _component_facts(apk: Any, manifest: Any) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+def _component_facts(apk: Any, manifest: Any, target_sdk: int | None) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
     components: list[dict[str, Any]] = []
     evidence: list[dict[str, Any]] = []
+    application = next(iter(_manifest_elements(manifest, "application")), None)
+    application_permission = _optional_string(
+        application.attrib.get(ANDROID_PERMISSION) if application is not None else None
+    )
     for component_type, method_name, tag_name in COMPONENT_TYPES:
         names = set(_call_optional(apk, f"get_{method_name}") or [])
         for element in _manifest_elements(manifest, tag_name):
@@ -73,23 +77,25 @@ def _component_facts(apk: Any, manifest: Any) -> tuple[list[dict[str, Any]], lis
                 names.add(name)
         for name in sorted(names):
             component_id = _stable_id(f"manifest:{component_type}", name)
-            exported_value = None
-            permission = _optional_string(
-                next(
-                    (
-                        element.attrib.get(ANDROID_PERMISSION)
-                        for element in _manifest_elements(manifest, tag_name)
-                        if element.attrib.get(ANDROID_NAME) == name
-                    ),
-                    None,
-                )
-            )
-            for element in _manifest_elements(manifest, tag_name):
-                if element.attrib.get(ANDROID_NAME) == name:
-                    raw_exported = element.attrib.get(ANDROID_EXPORTED)
-                    if raw_exported is not None:
-                        exported_value = raw_exported.lower() == "true"
-                    break
+            element = next((item for item in _manifest_elements(manifest, tag_name) if item.attrib.get(ANDROID_NAME) == name), None)
+            raw_exported = element.attrib.get(ANDROID_EXPORTED) if element is not None else None
+            explicit_exported = raw_exported.lower() == "true" if raw_exported is not None else None
+            has_intent_filter = bool(element is not None and any(str(child.tag).rsplit("}", 1)[-1] == "intent-filter" for child in element))
+            if explicit_exported is not None:
+                exported_value = explicit_exported
+            elif component_type == "provider":
+                exported_value = target_sdk <= 16 if target_sdk is not None else None
+            else:
+                # Apply Android version-dependent defaults for intent-filter components
+                if has_intent_filter:
+                    if target_sdk is not None and target_sdk >= 31:
+                        exported_value = False
+                    else:
+                        exported_value = True
+                else:
+                    exported_value = False
+            component_permission = _optional_string(element.attrib.get(ANDROID_PERMISSION)) if element is not None else None
+            permission = component_permission or application_permission
             components.append(
                 {
                     "id": component_id,
@@ -97,13 +103,16 @@ def _component_facts(apk: Any, manifest: Any) -> tuple[list[dict[str, Any]], lis
                     "name": name,
                     "exported": exported_value,
                     "permission": permission,
+                    "explicitExported": explicit_exported,
+                    "hasIntentFilter": has_intent_filter,
+                    "permissionSource": "component" if component_permission else "application" if application_permission else None,
                 }
             )
             evidence.append(
                 {
                     "id": component_id,
                     "label": f"{component_type}: {name}",
-                    "snippet": f"exported={exported_value}",
+                    "snippet": f"exported={exported_value}; explicitExported={explicit_exported}; intentFilter={has_intent_filter}; permission={permission or 'none'}",
                     "availability": "available",
                 }
             )
@@ -125,11 +134,8 @@ def parse_apk(path: str | Path) -> dict[str, Any]:
     if not zipfile.is_zipfile(apk_path):
         raise ApkParseError("Input is not a valid ZIP/APK archive.")
     try:
-        with zipfile.ZipFile(apk_path) as archive:
-            if archive.testzip() is not None:
-                raise ApkParseError(
-                    "APK archive is truncated or contains a corrupt entry."
-                )
+        with zipfile.ZipFile(apk_path):
+            pass
     except (OSError, zipfile.BadZipFile) as error:
         raise ApkParseError(f"Unable to read APK archive: {error}") from error
 
@@ -142,7 +148,7 @@ def parse_apk(path: str | Path) -> dict[str, Any]:
         ) from error
 
     try:
-        apk = APK(str(apk_path), testzip=True)
+        apk = APK(str(apk_path), testzip=False)
         package_name = _optional_string(apk.get_package())
         if not package_name:
             raise ApkParseError("AndroidManifest.xml does not declare a package name.")
@@ -160,9 +166,8 @@ def parse_apk(path: str | Path) -> dict[str, Any]:
             }
             for permission in permissions
         ]
-        components, component_evidence = _component_facts(
-            apk, apk.get_android_manifest_xml()
-        )
+        target_sdk = _optional_int(_call_optional(apk, "get_target_sdk_version"))
+        components, component_evidence = _component_facts(apk, apk.get_android_manifest_xml(), target_sdk)
         app_name = _optional_string(_call_optional(apk, "get_app_name"))
         version = _optional_string(_call_optional(apk, "get_androidversion_name"))
         app = {
@@ -170,7 +175,7 @@ def parse_apk(path: str | Path) -> dict[str, Any]:
             "packageName": package_name,
             "version": version,
             "minSdk": _optional_int(_call_optional(apk, "get_min_sdk_version")),
-            "targetSdk": _optional_int(_call_optional(apk, "get_target_sdk_version")),
+            "targetSdk": target_sdk,
             "permissions": permissions,
             "components": components,
         }

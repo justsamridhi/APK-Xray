@@ -8,6 +8,7 @@ import socket
 import sys
 import urllib.error
 import urllib.request
+import urllib.parse
 from typing import Any
 
 
@@ -28,20 +29,37 @@ def _validate(value: Any, evidence_ids: set[str]) -> dict[str, Any]:
         raise GemmaError("Gemma response must contain a claims list.")
     claims = []
     for index, claim in enumerate(payload["claims"]):
-        if not isinstance(claim, dict) or not isinstance(claim.get("text"), str):
-            raise GemmaError(f"Gemma claim {index} is malformed.")
+        # Validate text field: allow string (legacy) or dict with en/hi languages
+        text_field = claim.get("text")
+        if isinstance(text_field, str):
+            if not text_field.strip():
+                raise GemmaError(f"Gemma claim {index} text is empty.")
+            bilingual_text = {"en": text_field.strip(), "hi": text_field.strip()}
+        elif isinstance(text_field, dict):
+            en = text_field.get("en")
+            hi = text_field.get("hi")
+            if not (isinstance(en, str) and en.strip()) or not (isinstance(hi, str) and hi.strip()):
+                raise GemmaError(f"Gemma claim {index} missing or empty language text.")
+            bilingual_text = {"en": en.strip(), "hi": hi.strip()}
+        else:
+            raise GemmaError(f"Gemma claim {index} text is malformed.")
         if claim.get("classification") not in {"Can", "Could", "Cannot Prove"}:
             raise GemmaError(f"Gemma claim {index} has an invalid classification.")
         ids = claim.get("evidenceIds", claim.get("evidence_ids"))
-        if not isinstance(ids, list) or not all(item in evidence_ids for item in ids):
+        if not isinstance(ids, list) or not ids or not all(isinstance(item, str) and item in evidence_ids for item in ids):
             raise GemmaError(f"Gemma claim {index} cites unknown evidence.")
+        # Preserve claim status if provided; default to "generated" for AI‑generated claims.
+        claim_status = claim.get("status", "generated")
+        # Validate that the status is one of the allowed enum values.
+        if claim_status not in {"verified", "removed", "unsupported", "unavailable", "generated"}:
+            raise GemmaError(f"Gemma claim {index} has an invalid status '{claim_status}'.")
         claims.append(
             {
                 "id": f"claim:gemma:{index + 1}",
-                "text": claim["text"].strip(),
+                "text": bilingual_text,
                 "classification": claim["classification"],
                 "evidenceIds": ids,
-                "status": "verified",
+                "status": claim_status,
             }
         )
     explanations = payload.get("explanations", {})
@@ -272,12 +290,23 @@ def explain(
         "facts": {"app": facts["app"], "evidence": evidence},
         "required_output_fields": ["claims", "explanations"],
     }
+    # Build the request URL without adding the API key as a query parameter.
+    request_endpoint = endpoint
+    # Include the API key in the request headers as required by Google Generative AI.
+    request_headers = {"Content-Type": "application/json", "X-goog-api-key": api_key}
+    # Payload expected by the Google Generative AI (Gemma) endpoint.
+    payload = {
+        "contents": [
+            {
+                "role": "user",
+                "parts": [{"text": json.dumps(prompt, ensure_ascii=False)}]
+            }
+        ]
+    }
     request = urllib.request.Request(
-        endpoint,
-        data=json.dumps(
-            {"contents": [{"parts": [{"text": json.dumps(prompt, ensure_ascii=False)}]}]}
-        ).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+        request_endpoint,
+        data=json.dumps(payload).encode("utf-8"),
+        headers=request_headers,
         method="POST",
     )
     request_timeout = timeout
@@ -302,7 +331,17 @@ def explain(
                     code="gemma_timeout",
                 ) from error
         except urllib.error.HTTPError as error:
-            raise GemmaError(f"Gemma request returned HTTP {error.code}.") from error
+            # Read the response body (error details) safely.
+            try:
+                error_body_bytes = error.read()
+                error_body = error_body_bytes.decode('utf-8', errors='replace')
+            except Exception:
+                error_body = ''
+            # Do not leak the API key; the body should not contain it.
+            message = f"Gemma request returned HTTP {error.code}."
+            if error_body:
+                message += f" Body: {error_body}"
+            raise GemmaError(message) from error
         except urllib.error.URLError as error:
             if isinstance(error.reason, (TimeoutError, socket.timeout)):
                 if attempt == 1:

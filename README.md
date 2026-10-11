@@ -10,7 +10,7 @@ The current workflow includes:
 
 - a React/Vite frontend for APK selection, upload progress, report rendering,
   evidence drawers, and English/Hindi explanation display;
-- a FastAPI backend at `POST /api/upload` and `GET /api/report`;
+- a FastAPI backend at `POST /api/upload`;
 - archive and upload-size validation before parsing;
 - normalized package metadata, permissions, components, and stable evidence IDs;
 - deterministic exposure rules and a capped score owned by the backend;
@@ -36,9 +36,9 @@ APK upload
     -> frontend report and evidence views
 ```
 
-The frontend calls `/api/upload` for analysis. It stores the returned report in
-session storage and uses `/api/report` when opening the report route, falling
-back to the stored report when the backend has no latest report.
+The frontend renders the report returned directly from `/api/upload`. Reports
+are not retained in a process-wide backend slot, so one analysis cannot be
+retrieved by a later, unrelated request.
 
 ## Setup
 

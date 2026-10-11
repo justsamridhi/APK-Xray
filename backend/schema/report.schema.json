@@ -160,6 +160,16 @@
             "string",
             "null"
           ]
+        },
+        "explicitExported": {
+          "type": ["boolean", "null"]
+        },
+        "hasIntentFilter": {
+          "type": "boolean"
+        },
+        "permissionSource": {
+          "type": ["string", "null"],
+          "enum": ["component", "application", null]
         }
       }
     },
@@ -389,8 +399,13 @@
           "$ref": "#/$defs/stableId"
         },
         "text": {
-          "type": "string",
-          "minLength": 1
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["en","hi"],
+          "properties": {
+            "en": {"type": "string", "minLength": 1},
+            "hi": {"type": "string", "minLength": 1}
+          }
         },
         "classification": {
           "enum": [
@@ -411,7 +426,8 @@
             "verified",
             "removed",
             "unsupported",
-            "unavailable"
+            "unavailable",
+            "generated"
           ]
         }
       }
