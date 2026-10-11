@@ -55,6 +55,19 @@ The backend listens on `http://127.0.0.1:8000` by default. Detailed backend
 configuration, testing, and safe live-verification instructions are in
 [backend/README.md](backend/README.md).
 
+#### Environment Configuration
+
+Configuration variables can be copied from [`.env.example`](.env.example):
+
+- `APK_XRAY_MAX_UPLOAD_BYTES`: Maximum upload size in bytes (default: `52428800` / 50 MB).
+- `APK_XRAY_MAX_ZIP_ENTRIES`: Maximum ZIP entries accepted before parsing (default: `1000`).
+- `APK_XRAY_MAX_TOTAL_UNCOMPRESSED_BYTES`: Maximum total uncompressed bytes (default: `209715200`).
+- `APK_XRAY_MAX_ENTRY_UNCOMPRESSED_BYTES`: Maximum entry uncompressed bytes (default: `52428800`).
+- `APK_XRAY_MAX_COMPRESSION_RATIO`: Maximum allowed compression ratio (default: `100.0`).
+- `GEMMA4_ENDPOINT`: API endpoint URL for Gemma 4 (optional).
+- `GEMMA4_API_KEY`: API key for Gemma 4 (optional; keep credentials local, never commit).
+- `APK_XRAY_GEMMA_TIMEOUT`: Request timeout in seconds for Gemma calls (default: `90`).
+
 ### Frontend
 
 ```powershell
@@ -87,8 +100,7 @@ npm run build
 
 The automated suites use mocked Gemma transport and isolate the API key from
 tests. A live Gemma request is an optional manual check and is not part of the
-offline test suite. A previous live run has been reported, but repeatability
-has not been established by that single observation.
+offline test suite.
 
 ## Limitations and safety
 
@@ -106,3 +118,7 @@ The current deterministic implementation covers network, SMS, microphone,
 location, and unprotected exported-component indicators. Capability-chain
 support is represented in the report contract, but no C1/C2 detection rules
 are currently implemented in `backend/scoring.py`.
+
+## License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
