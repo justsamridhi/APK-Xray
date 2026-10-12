@@ -96,14 +96,16 @@ the offline tests.
 
 | Rule | Trigger | Points | Severity |
 | --- | --- | ---: | --- |
-| `APKX-NET-001` | `INTERNET` permission | 12 | low |
+| `APKX-NET-001` | `INTERNET` permission | 2 | low |
 | `APKX-SMS-001` | `READ_SMS` or `SEND_SMS` | 25 | high |
 | `APKX-MIC-001` | `RECORD_AUDIO` | 18 | medium |
 | `APKX-LOC-001` | fine/coarse location | 12 | medium |
-| `APKX-EXP-001` | exported component without permission | 20 | high |
+| `APKX-EXP-001` | non-launcher exported component without permission | 20 | high |
 
 The score is the capped sum of matched rule points. No capability-chain
 scoring rule is currently implemented.
+Launcher activities are exported by design so users can open the app and are
+not scored as exposure findings.
 
 ## Schema and parser
 

@@ -104,8 +104,8 @@ def calculate_score(facts: dict[str, Any]) -> dict[str, Any]:
         breakdown.append({"ruleId": rule_id, "points": points})
 
     for component in facts["app"].get("components", []):
-        # Skip launcher activity-alias entries (they are benign even if exported)
-        if component.get("exported") is True and not component.get("permission") and component.get("type") != "activity-alias":
+        # Launcher activities must be exported so users can start the app.
+        if component.get("exported") is True and not component.get("permission") and not component.get("isLauncher") and component.get("type") != "activity-alias":
             rule_id = "APKX-EXP-001"
             evidence_item = next(
                 (item for item in evidence if item.get("id") == component.get("id")),

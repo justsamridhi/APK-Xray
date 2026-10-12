@@ -61,7 +61,10 @@ class ApkParserTests(unittest.TestCase):
         manifest = ElementTree.fromstring(
             f'''<manifest xmlns:android="{ANDROID_NS}"><application android:permission="org.example.GUARD">
                 <activity android:name="Explicit" android:exported="false"><intent-filter /></activity>
-                <activity android:name="Implicit"><intent-filter /></activity>
+                <activity android:name="Implicit"><intent-filter>
+                    <action android:name="android.intent.action.MAIN" />
+                    <category android:name="android.intent.category.LAUNCHER" />
+                </intent-filter></activity>
                 <service android:name="Private" />
                 <provider android:name="LegacyProvider" />
             </application></manifest>'''
@@ -75,6 +78,7 @@ class ApkParserTests(unittest.TestCase):
         by_name = {component["name"]: component for component in components}
         self.assertFalse(by_name["Explicit"]["exported"])
         self.assertTrue(by_name["Implicit"]["exported"])
+        self.assertTrue(by_name["Implicit"]["isLauncher"])
         self.assertFalse(by_name["Private"]["exported"])
         self.assertTrue(by_name["LegacyProvider"]["exported"])
         self.assertEqual(by_name["Implicit"]["permission"], "org.example.GUARD")

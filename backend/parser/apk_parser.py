@@ -12,6 +12,7 @@ ANDROID_NS = "http://schemas.android.com/apk/res/android"
 ANDROID_NAME = f"{{{ANDROID_NS}}}name"
 ANDROID_EXPORTED = f"{{{ANDROID_NS}}}exported"
 ANDROID_PERMISSION = f"{{{ANDROID_NS}}}permission"
+ANDROID_INTENT_NAME = f"{{{ANDROID_NS}}}name"
 COMPONENT_TYPES = (
     ("activity", "activities", "activity"),
     ("service", "services", "service"),
@@ -81,6 +82,24 @@ def _component_facts(apk: Any, manifest: Any, target_sdk: int | None) -> tuple[l
             raw_exported = element.attrib.get(ANDROID_EXPORTED) if element is not None else None
             explicit_exported = raw_exported.lower() == "true" if raw_exported is not None else None
             has_intent_filter = bool(element is not None and any(str(child.tag).rsplit("}", 1)[-1] == "intent-filter" for child in element))
+            is_launcher = bool(
+                component_type == "activity"
+                and element is not None
+                and any(
+                    any(
+                        str(child.tag).rsplit("}", 1)[-1] == "action"
+                        and child.attrib.get(ANDROID_INTENT_NAME) == "android.intent.action.MAIN"
+                        for child in intent_filter
+                    )
+                    and any(
+                        str(child.tag).rsplit("}", 1)[-1] == "category"
+                        and child.attrib.get(ANDROID_INTENT_NAME) == "android.intent.category.LAUNCHER"
+                        for child in intent_filter
+                    )
+                    for intent_filter in element
+                    if str(intent_filter.tag).rsplit("}", 1)[-1] == "intent-filter"
+                )
+            )
             if explicit_exported is not None:
                 exported_value = explicit_exported
             elif component_type == "provider":
@@ -105,6 +124,7 @@ def _component_facts(apk: Any, manifest: Any, target_sdk: int | None) -> tuple[l
                     "permission": permission,
                     "explicitExported": explicit_exported,
                     "hasIntentFilter": has_intent_filter,
+                    "isLauncher": is_launcher,
                     "permissionSource": "component" if component_permission else "application" if application_permission else None,
                 }
             )
@@ -112,7 +132,7 @@ def _component_facts(apk: Any, manifest: Any, target_sdk: int | None) -> tuple[l
                 {
                     "id": component_id,
                     "label": f"{component_type}: {name}",
-                    "snippet": f"exported={exported_value}; explicitExported={explicit_exported}; intentFilter={has_intent_filter}; permission={permission or 'none'}",
+                    "snippet": f"exported={exported_value}; explicitExported={explicit_exported}; intentFilter={has_intent_filter}; launcher={is_launcher}; permission={permission or 'none'}",
                     "availability": "available",
                 }
             )

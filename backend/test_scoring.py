@@ -137,6 +137,31 @@ class ScoringTests(unittest.TestCase):
         self.assertEqual(result["value"], 0)
         self.assert_score_consistent(result)
 
+    def test_launcher_activity_is_not_an_exposure_finding(self) -> None:
+        facts = {
+            "app": {
+                "packageName": "org.example.app",
+                "permissions": [],
+                "components": [
+                    {
+                        "id": "manifest:activity:Main",
+                        "name": "Main",
+                        "type": "activity",
+                        "exported": True,
+                        "isLauncher": True,
+                        "permission": None,
+                    }
+                ],
+            },
+            "evidence": [],
+        }
+
+        result = calculate_score(facts)
+
+        self.assertEqual(result["value"], 0)
+        self.assertEqual(result["findings"], [])
+        self.assert_score_consistent(result)
+
     def test_exported_activity_alias_is_excluded(self) -> None:
         facts = {
             "app": {
