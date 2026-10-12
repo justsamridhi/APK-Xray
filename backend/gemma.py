@@ -298,7 +298,6 @@ def explain(
     payload = {
         "contents": [
             {
-                "role": "user",
                 "parts": [{"text": json.dumps(prompt, ensure_ascii=False)}]
             }
         ],

@@ -95,6 +95,7 @@ class GemmaTests(unittest.TestCase):
         self.assertNotIn("Authorization", request.headers)
         self.assertIn("contents", request_body)
         self.assertIn("parts", request_body["contents"][0])
+        self.assertNotIn("role", request_body["contents"][0])
         self.assertIn("text", request_body["contents"][0]["parts"][0])
         self.assertEqual(
             request_body["generationConfig"],
