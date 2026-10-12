@@ -96,6 +96,13 @@ class GemmaTests(unittest.TestCase):
         self.assertIn("contents", request_body)
         self.assertIn("parts", request_body["contents"][0])
         self.assertIn("text", request_body["contents"][0]["parts"][0])
+        self.assertEqual(
+            request_body["generationConfig"],
+            {
+                "temperature": 0.1,
+                "maxOutputTokens": 2048,
+            },
+        )
         self.assertNotIn('"output":', request_body["contents"][0]["parts"][0]["text"])
         self.assertIn("Do not use evidence IDs as object keys", request_body["contents"][0]["parts"][0]["text"])
         self.assertEqual(result["claims"][0]["evidenceIds"], ["manifest:package"])

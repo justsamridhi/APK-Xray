@@ -301,7 +301,11 @@ def explain(
                 "role": "user",
                 "parts": [{"text": json.dumps(prompt, ensure_ascii=False)}]
             }
-        ]
+        ],
+        "generationConfig": {
+            "temperature": 0.1,
+            "maxOutputTokens": 2048,
+        },
     }
     request = urllib.request.Request(
         request_endpoint,

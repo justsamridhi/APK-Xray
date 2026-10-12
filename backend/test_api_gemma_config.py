@@ -20,11 +20,19 @@ class GemmaConfigTests(unittest.TestCase):
             z.writestr("AndroidManifest.xml", "<manifest></manifest>")
         self.sample_apk_bytes = buffer.getvalue()
 
-    @patch('backend.parser.parse_apk')
-    @patch('backend.gemma.explain')
+    @patch('backend.api.parse_apk')
+    @patch('backend.api.explain')
     def test_ai_used_when_endpoint_and_key_set(self, mock_explain, mock_parse):
         mock_parse.return_value = {
-            'app': {'packageName': 'com.example.app', 'permissions': [], 'components': []},
+            'app': {
+                'name': None,
+                'packageName': 'com.example.app',
+                'version': None,
+                'minSdk': None,
+                'targetSdk': None,
+                'permissions': [],
+                'components': [],
+            },
             'evidence': []
         }
         mock_explain.return_value = {

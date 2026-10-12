@@ -78,6 +78,13 @@ function explanations(value: unknown): Partial<Record<ReportLanguage, string>> {
   }
 }
 
+function isLocalizedText(value: unknown): boolean {
+  if (!value || typeof value !== 'object') return false
+  const source = value as Record<string, unknown>
+  return typeof source.en === 'string' && source.en.trim().length > 0
+    && typeof source.hi === 'string' && source.hi.trim().length > 0
+}
+
 function capabilityChains(value: unknown): CapabilityChain[] {
   if (!Array.isArray(value)) return []
   return value.flatMap((item, index) => {
@@ -106,7 +113,7 @@ export function normalizeReport(value: unknown): ReportData | null {
   if (typeof rawApp.packageName !== 'string' || !rawApp.packageName.trim() || !/^[A-Za-z][A-Za-z0-9_]*(\.[A-Za-z][A-Za-z0-9_]*)+$/.test(rawApp.packageName) || !('minSdk' in rawApp) || !('targetSdk' in rawApp) || !Array.isArray(rawApp.permissions) || !Array.isArray(rawApp.components)) return null
   if (typeof rawScore.value !== 'number' || !Number.isFinite(rawScore.value) || rawScore.value < 0 || rawScore.value > 100) return null
   if (!Array.isArray(rawScore.breakdown) || !Array.isArray(raw.claims) || !['low', 'moderate', 'high', 'very-high'].includes(rawScore.severity as string)) return null
-  if (raw.claims.some((claim) => !claim || typeof claim !== 'object' || typeof (claim as Record<string, unknown>).id !== 'string' || typeof (claim as Record<string, unknown>).text !== 'string' || !['Can', 'Could', 'Cannot Prove'].includes((claim as Record<string, unknown>).classification as string) || !Array.isArray((claim as Record<string, unknown>).evidenceIds) || !['verified', 'removed', 'unsupported', 'unavailable'].includes((claim as Record<string, unknown>).status as string))) return null
+  if (raw.claims.some((claim) => !claim || typeof claim !== 'object' || typeof (claim as Record<string, unknown>).id !== 'string' || !isLocalizedText((claim as Record<string, unknown>).text) || !['Can', 'Could', 'Cannot Prove'].includes((claim as Record<string, unknown>).classification as string) || !Array.isArray((claim as Record<string, unknown>).evidenceIds) || !['verified', 'removed', 'unsupported', 'unavailable'].includes((claim as Record<string, unknown>).status as string))) return null
   const findings: ReportFinding[] = []
   for (const item of raw.findings) {
     if (!item || typeof item !== 'object') return null

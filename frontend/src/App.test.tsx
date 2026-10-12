@@ -9,7 +9,13 @@ const reportContract = {
   generatedAt: '2026-01-01T00:00:00Z',
   app: { minSdk: 1, targetSdk: 1, permissions: [], components: [] },
   score: { breakdown: [] },
-  claims: [],
+  claims: [{
+    id: 'claim:test',
+    text: { en: 'The app declares network access.', hi: 'ऐप नेटवर्क एक्सेस घोषित करता है।' },
+    classification: 'Can',
+    evidenceIds: ['manifest:permission:android.permission.INTERNET'],
+    status: 'verified',
+  }],
 }
 
 describe('application routes', () => {
