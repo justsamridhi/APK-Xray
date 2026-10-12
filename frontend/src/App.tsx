@@ -11,6 +11,7 @@ const validPaths: string[] = ['/', '/analyze', '/report', '/report/sample', '/ab
 const apkMimeTypes = new Set(['application/vnd.android.package-archive', 'application/octet-stream', ''])
 
 type UploadState = 'idle' | 'ready' | 'uploading' | 'error'
+const processingStages = ['Uploading APK…', 'Reading Android manifest…', 'Applying deterministic rules…', 'Preparing evidence report…']
 
 function formatFileSize(bytes: number) {
   if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`
@@ -45,8 +46,20 @@ function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
   const [state, setState] = useState<UploadState>('idle')
   const [isDragging, setIsDragging] = useState(false)
   const [controller, setController] = useState<AbortController | null>(null)
+  const [processingStage, setProcessingStage] = useState(0)
   const resultRef = useRef<HTMLDivElement>(null)
   const requestIdRef = useRef(0)
+
+  useEffect(() => {
+    if (state !== 'uploading') {
+      setProcessingStage(0)
+      return
+    }
+    const interval = window.setInterval(() => {
+      setProcessingStage((current) => Math.min(current + 1, processingStages.length - 1))
+    }, 1800)
+    return () => window.clearInterval(interval)
+  }, [state])
 
   const selectFile = (candidate: File | undefined) => {
     if (!candidate) return
@@ -129,7 +142,7 @@ function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
       </div>
       {error && <p className="upload-error" role="alert"><Icon name="alert" />{error}</p>}
       {file && !error && <p className="upload-success" role="status"><Icon name="shieldCheck" />File validated and ready for static analysis.</p>}
-      {state === 'uploading' && <div ref={resultRef} tabIndex={-1}><LoadingSpinner label="Analyzing APK with the static backend…" /></div>}
+      {state === 'uploading' && <div ref={resultRef} tabIndex={-1}><LoadingSpinner label={processingStages[processingStage]} /><p className="page-intro">The APK is being analyzed safely. It is never installed or executed.</p></div>}
       <div className="upload-actions">
         <SecondaryButton type="button" onClick={() => fileInputRef.current?.click()} disabled={state === 'uploading'}>Choose APK</SecondaryButton>
         <PrimaryButton type="button" onClick={uploadFile} disabled={!file || state === 'uploading'}>{state === 'uploading' ? 'Analyzing…' : 'Start analysis'}</PrimaryButton>
