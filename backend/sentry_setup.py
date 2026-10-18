@@ -80,6 +80,8 @@ _SPAN_DATA_ALLOWLIST: frozenset[str] = frozenset(
         # ---- APK-Xray-specific ----
         "apk_xray.retry_count",     # 0 = no retry, 1 = one retry occurred
         "apk_xray.token_source",    # "response_metadata" | "unavailable"
+        "apk_xray.claim_count",     # number of AI claims returned
+        "apk_xray.rejected_claim_count",  # claims failing structure validation
     }
 )
 
