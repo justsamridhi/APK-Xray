@@ -8,27 +8,36 @@ All tests verify behaviour in isolation:
 - Disabled state when no DSN is configured.
 - Config validation (sample-rate bounds).
 - SDK initialisation occurs at most once per process.
-- Expected spans are created around pipeline stages.
-- Unexpected exceptions are captured without altering API responses.
-- Gemma failure preserves graceful fallback.
+- Expected pipeline spans are created with the correct op names.
+- GenAI telemetry (model, tokens, retry, token source) is recorded correctly.
+- Token counts are unavailable when usageMetadata is absent.
+- Gemma timeout records outcome and retry count without raising server errors.
+- Gemma failure retains graceful fallback behaviour.
+- Unexpected exceptions are observable via existing FastAPI integration.
 - Sensitive values are removed from events, breadcrumbs, headers, URLs, and
   span attributes by the ``scrub_event`` hook.
+- GenAI allowlisted attributes survive sanitisation; all others are stripped.
 - Existing behaviour is completely unchanged when Sentry is disabled.
 """
 
 from __future__ import annotations
 
 import io
+import json
+import socket
 import unittest
+import urllib.error
 import zipfile
 from typing import Any
-from unittest.mock import MagicMock, call, patch
+from unittest.mock import MagicMock, patch
 
 import sentry_sdk
 
 from backend.config import Settings, load_settings
+from backend.gemma import _extract_token_counts
 from backend.sentry_setup import (
     _SENSITIVE_HEADER_NAMES,
+    _SPAN_DATA_ALLOWLIST,
     _redact_headers,
     _scrub_breadcrumbs,
     _scrub_exception,
@@ -98,11 +107,26 @@ def _make_envelope() -> dict[str, Any]:
             {
                 "op": "apk.parse",
                 "data": {
+                    # allowlisted operational attributes
                     "stage": "parse",
                     "outcome": "ok",
                     "apk_size_bytes": 512,
+                    "error_category": "none",
+                    # allowlisted GenAI attributes
+                    "gen_ai.system": "google_gemini",
+                    "gen_ai.operation.name": "generate",
+                    "gen_ai.request.model": "gemma-4",
+                    "gen_ai.usage.input_tokens": 120,
+                    "gen_ai.usage.output_tokens": 80,
+                    "gen_ai.usage.total_tokens": 200,
+                    "apk_xray.retry_count": 0,
+                    "apk_xray.token_source": "response_metadata",
+                    # forbidden attributes that must be stripped
                     "raw_path": "/tmp/apk-xray-abc123/upload.apk",
                     "evidence": [{"id": "manifest:package"}],
+                    "package_name": "org.example.app",
+                    "prompt": "Do not send this",
+                    "model_response": "Do not send this either",
                 },
             }
         ],
@@ -386,8 +410,11 @@ class ScrubEventTests(unittest.TestCase):
         span_data = result["spans"][0]["data"]
         self.assertNotIn("raw_path", span_data)
         self.assertNotIn("evidence", span_data)
+        self.assertNotIn("package_name", span_data)
+        self.assertNotIn("prompt", span_data)
+        self.assertNotIn("model_response", span_data)
 
-    def test_span_data_allowlisted_attributes_survive(self) -> None:
+    def test_span_data_allowlisted_operational_attributes_survive(self) -> None:
         event = _make_envelope()
         result = self._scrub(event)
         assert result is not None
@@ -395,6 +422,21 @@ class ScrubEventTests(unittest.TestCase):
         self.assertIn("stage", span_data)
         self.assertIn("outcome", span_data)
         self.assertIn("apk_size_bytes", span_data)
+        self.assertIn("error_category", span_data)
+
+    def test_span_data_allowlisted_genai_attributes_survive(self) -> None:
+        event = _make_envelope()
+        result = self._scrub(event)
+        assert result is not None
+        span_data = result["spans"][0]["data"]
+        self.assertIn("gen_ai.system", span_data)
+        self.assertIn("gen_ai.operation.name", span_data)
+        self.assertIn("gen_ai.request.model", span_data)
+        self.assertIn("gen_ai.usage.input_tokens", span_data)
+        self.assertIn("gen_ai.usage.output_tokens", span_data)
+        self.assertIn("gen_ai.usage.total_tokens", span_data)
+        self.assertIn("apk_xray.retry_count", span_data)
+        self.assertIn("apk_xray.token_source", span_data)
 
     # --- edge cases ---
 
@@ -608,23 +650,40 @@ class ScrubHelpersTests(unittest.TestCase):
 
     def test_scrub_span_data_removes_unlisted_keys(self) -> None:
         span = {
-            "op": "apk.parse",
+            "op": "gen_ai.generate",
             "data": {
-                "stage": "parse",
+                # allowlisted
+                "stage": "gemma",
                 "outcome": "ok",
                 "apk_size_bytes": 1024,
-                "error_category": "parse_error",
+                "error_category": "none",
+                "gen_ai.system": "google_gemini",
+                "gen_ai.operation.name": "generate",
+                "gen_ai.request.model": "gemma-4",
+                "gen_ai.usage.input_tokens": 100,
+                "gen_ai.usage.output_tokens": 60,
+                "gen_ai.usage.total_tokens": 160,
+                "apk_xray.retry_count": 0,
+                "apk_xray.token_source": "response_metadata",
+                # forbidden
                 "raw_path": "/tmp/secret",
                 "evidence": ["id1"],
+                "package_name": "org.example.app",
+                "prompt": "secret prompt",
             },
         }
         result = _scrub_span_data(span)
+        # forbidden keys gone
         self.assertNotIn("raw_path", result["data"])
         self.assertNotIn("evidence", result["data"])
+        self.assertNotIn("package_name", result["data"])
+        self.assertNotIn("prompt", result["data"])
+        # allowlisted keys present
         self.assertIn("stage", result["data"])
         self.assertIn("outcome", result["data"])
-        self.assertIn("apk_size_bytes", result["data"])
-        self.assertIn("error_category", result["data"])
+        self.assertIn("gen_ai.system", result["data"])
+        self.assertIn("gen_ai.usage.input_tokens", result["data"])
+        self.assertIn("apk_xray.retry_count", result["data"])
 
     def test_redact_headers_handles_non_dict_gracefully(self) -> None:
         result = _redact_headers("not a dict")
@@ -633,6 +692,395 @@ class ScrubHelpersTests(unittest.TestCase):
     def test_all_sensitive_header_names_are_lowercase(self) -> None:
         for name in _SENSITIVE_HEADER_NAMES:
             self.assertEqual(name, name.lower(), f"{name!r} must be lowercase")
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+# ---------------------------------------------------------------------------
+# 7. Token count extraction from Gemini API usageMetadata
+# ---------------------------------------------------------------------------
+
+class TokenExtractionTests(unittest.TestCase):
+    """_extract_token_counts reads from the real Gemini API response shape."""
+
+    def test_extracts_all_counts_when_present(self) -> None:
+        envelope = {
+            "candidates": [{"content": {"parts": [{"text": "{}"}]}}],
+            "usageMetadata": {
+                "promptTokenCount": 120,
+                "candidatesTokenCount": 80,
+                "totalTokenCount": 200,
+            },
+        }
+        result = _extract_token_counts(envelope)
+        self.assertEqual(result["input"], 120)
+        self.assertEqual(result["output"], 80)
+        self.assertEqual(result["total"], 200)
+
+    def test_returns_none_when_usage_metadata_absent(self) -> None:
+        envelope = {"candidates": [{"content": {"parts": [{"text": "{}"}]}}]}
+        result = _extract_token_counts(envelope)
+        self.assertIsNone(result["input"])
+        self.assertIsNone(result["output"])
+        self.assertIsNone(result["total"])
+
+    def test_returns_none_when_envelope_is_not_dict(self) -> None:
+        result = _extract_token_counts("not a dict")
+        self.assertIsNone(result["input"])
+        self.assertIsNone(result["output"])
+        self.assertIsNone(result["total"])
+
+    def test_returns_none_for_negative_token_count(self) -> None:
+        envelope = {
+            "usageMetadata": {
+                "promptTokenCount": -1,
+                "candidatesTokenCount": 80,
+                "totalTokenCount": 200,
+            }
+        }
+        result = _extract_token_counts(envelope)
+        self.assertIsNone(result["input"])
+        self.assertEqual(result["output"], 80)
+
+    def test_returns_none_for_non_integer_token_count(self) -> None:
+        envelope = {
+            "usageMetadata": {
+                "promptTokenCount": "not-a-number",
+                "candidatesTokenCount": 80,
+                "totalTokenCount": 200,
+            }
+        }
+        result = _extract_token_counts(envelope)
+        self.assertIsNone(result["input"])
+        self.assertEqual(result["output"], 80)
+
+    def test_zero_is_a_valid_token_count(self) -> None:
+        envelope = {
+            "usageMetadata": {
+                "promptTokenCount": 0,
+                "candidatesTokenCount": 0,
+                "totalTokenCount": 0,
+            }
+        }
+        result = _extract_token_counts(envelope)
+        self.assertEqual(result["input"], 0)
+        self.assertEqual(result["output"], 0)
+        self.assertEqual(result["total"], 0)
+
+    def test_partial_metadata_returns_available_fields(self) -> None:
+        envelope = {
+            "usageMetadata": {
+                "promptTokenCount": 50,
+                # candidatesTokenCount absent
+                "totalTokenCount": 100,
+            }
+        }
+        result = _extract_token_counts(envelope)
+        self.assertEqual(result["input"], 50)
+        self.assertIsNone(result["output"])
+        self.assertEqual(result["total"], 100)
+
+
+# ---------------------------------------------------------------------------
+# 8. Span allowlist completeness
+# ---------------------------------------------------------------------------
+
+class SpanAllowlistTests(unittest.TestCase):
+    def test_all_genai_attributes_are_in_allowlist(self) -> None:
+        required = {
+            "gen_ai.system",
+            "gen_ai.operation.name",
+            "gen_ai.request.model",
+            "gen_ai.usage.input_tokens",
+            "gen_ai.usage.output_tokens",
+            "gen_ai.usage.total_tokens",
+            "apk_xray.retry_count",
+            "apk_xray.token_source",
+        }
+        missing = required - _SPAN_DATA_ALLOWLIST
+        self.assertEqual(missing, set(), f"Missing from allowlist: {missing}")
+
+    def test_sensitive_genai_keys_are_not_in_allowlist(self) -> None:
+        forbidden = {"prompt", "model_response", "package_name", "raw_path", "evidence"}
+        leaked = forbidden & _SPAN_DATA_ALLOWLIST
+        self.assertEqual(leaked, set(), f"Sensitive keys in allowlist: {leaked}")
+
+    def test_allowlist_entries_are_strings(self) -> None:
+        for key in _SPAN_DATA_ALLOWLIST:
+            self.assertIsInstance(key, str)
+
+
+# ---------------------------------------------------------------------------
+# 9. Gemma failure tracing — regression tests for the timeout/retry story
+# ---------------------------------------------------------------------------
+
+class GemmaFailureTracingTests(unittest.TestCase):
+    """Verify that Gemma failures are correctly traced and API behavior preserved."""
+
+    def _make_facts(self) -> dict:
+        return {
+            "app": {
+                "name": None,
+                "packageName": "org.example.app",
+                "version": None,
+                "minSdk": None,
+                "targetSdk": 35,
+                "permissions": [],
+                "components": [],
+            },
+            "evidence": [
+                {
+                    "id": "manifest:package",
+                    "label": "Package name",
+                    "snippet": "org.example.app",
+                    "availability": "available",
+                }
+            ],
+        }
+
+    def _minimal_apk(self) -> bytes:
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as z:
+            z.writestr("AndroidManifest.xml", b"manifest")
+        return buf.getvalue()
+
+    def test_gemma_timeout_on_second_attempt_raises_gemma_error(self) -> None:
+        """Two consecutive timeouts produce a GemmaError, not an unhandled exception."""
+        from backend.gemma import GemmaError, explain
+
+        facts = self._make_facts()
+        facts["evidence"][0]["id"] = "manifest:package"
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=TimeoutError("timed out"),
+        ):
+            with self.assertRaises(GemmaError) as ctx:
+                explain("https://example.test/v1", "test-key", facts, timeout=1)
+
+        self.assertEqual(ctx.exception.code, "gemma_timeout")
+
+    def test_gemma_http_429_raises_gemma_error_with_rate_limit(self) -> None:
+        from backend.gemma import GemmaError, explain
+
+        facts = self._make_facts()
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=urllib.error.HTTPError(
+                "https://example.test", 429, "Too Many Requests", {}, None
+            ),
+        ):
+            with self.assertRaises(GemmaError) as ctx:
+                explain("https://example.test/v1", "test-key", facts, timeout=1)
+
+        self.assertIn("HTTP 429", str(ctx.exception))
+
+    def test_gemma_retry_succeeds_on_second_attempt(self) -> None:
+        from backend.gemma import GemmaError, explain
+
+        generated = {
+            "claims": [],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+        body = json.dumps(
+            {"candidates": [{"content": {"parts": [{"text": json.dumps(generated)}]}}]}
+        ).encode()
+
+        class _FakeResponse:
+            def __enter__(self) -> "_FakeResponse":
+                return self
+            def __exit__(self, *_: object) -> None:
+                pass
+            def read(self, _n: int) -> bytes:
+                return body
+
+        with patch(
+            "urllib.request.urlopen",
+            side_effect=[TimeoutError("first attempt"), _FakeResponse()],
+        ) as mock_urlopen:
+            result = explain("https://example.test/v1", "test-key", self._make_facts(), timeout=1)
+
+        self.assertEqual(result["claims"], [])
+        self.assertEqual(mock_urlopen.call_count, 2)
+
+    def test_gemma_timeout_does_not_change_api_response_status(self) -> None:
+        """A Gemma timeout produces ai.status=error, not a 500."""
+        from fastapi.testclient import TestClient
+        from backend.api import app
+        from backend.gemma import GemmaError
+
+        client = TestClient(app)
+        with (
+            patch("backend.api.parse_apk", return_value=self._make_facts()),
+            patch(
+                "backend.api.explain",
+                side_effect=GemmaError("Gemma request timed out.", code="gemma_timeout"),
+            ),
+            patch.dict(
+                "os.environ",
+                {
+                    "GEMMA4_ENDPOINT": "https://example.test/v1",
+                    "GEMMA4_API_KEY": "test-key",
+                    "SENTRY_DSN": "",
+                },
+            ),
+        ):
+            response = client.post(
+                "/api/upload",
+                files={
+                    "file": (
+                        "sample.apk",
+                        self._minimal_apk(),
+                        "application/vnd.android.package-archive",
+                    )
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        report = response.json()
+        self.assertEqual(report["ai"]["status"], "error")
+        self.assertIn("gemma_timeout", report["ai"]["message"])
+        # Deterministic findings are always present regardless of Gemma.
+        self.assertIn("findings", report)
+        self.assertIn("score", report)
+
+    def test_gemma_contract_violation_does_not_change_api_response_status(self) -> None:
+        """A bad Gemma response produces ai.status=error, not a 500."""
+        from fastapi.testclient import TestClient
+        from backend.api import app
+        from backend.gemma import GemmaError
+
+        client = TestClient(app)
+        with (
+            patch("backend.api.parse_apk", return_value=self._make_facts()),
+            patch(
+                "backend.api.explain",
+                side_effect=GemmaError(
+                    "Gemma generated text did not contain exactly one complete "
+                    "JSON object with claims and explanations.",
+                    code="gemma_error",
+                ),
+            ),
+            patch.dict(
+                "os.environ",
+                {
+                    "GEMMA4_ENDPOINT": "https://example.test/v1",
+                    "GEMMA4_API_KEY": "test-key",
+                    "SENTRY_DSN": "",
+                },
+            ),
+        ):
+            response = client.post(
+                "/api/upload",
+                files={
+                    "file": (
+                        "sample.apk",
+                        self._minimal_apk(),
+                        "application/vnd.android.package-archive",
+                    )
+                },
+            )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["ai"]["status"], "error")
+
+
+# ---------------------------------------------------------------------------
+# 10. GenAI sensitive data — regression tests for privacy boundary
+# ---------------------------------------------------------------------------
+
+class GenAiPrivacyTests(unittest.TestCase):
+    """Verify that GenAI-specific sensitive content is stripped by scrub_event."""
+
+    def _scrub(self, event: dict[str, Any]) -> dict[str, Any] | None:
+        return scrub_event(event, {})
+
+    def _event_with_span(self, span_data: dict[str, Any]) -> dict[str, Any]:
+        return {
+            "event_id": "x",
+            "spans": [{"op": "gen_ai.generate", "data": span_data}],
+        }
+
+    def test_prompt_in_span_data_is_stripped(self) -> None:
+        event = self._event_with_span(
+            {"stage": "gemma", "prompt": "Explain this APK: org.malicious.app"}
+        )
+        result = self._scrub(event)
+        assert result is not None
+        self.assertNotIn("prompt", result["spans"][0]["data"])
+        self.assertIn("stage", result["spans"][0]["data"])
+
+    def test_model_response_in_span_data_is_stripped(self) -> None:
+        event = self._event_with_span(
+            {
+                "stage": "gemma",
+                "model_response": '{"claims": [{"text": "Can access SMS"}]}',
+            }
+        )
+        result = self._scrub(event)
+        assert result is not None
+        self.assertNotIn("model_response", result["spans"][0]["data"])
+
+    def test_package_name_in_span_data_is_stripped(self) -> None:
+        event = self._event_with_span(
+            {"stage": "gemma", "package_name": "org.example.app", "outcome": "ok"}
+        )
+        result = self._scrub(event)
+        assert result is not None
+        self.assertNotIn("package_name", result["spans"][0]["data"])
+        self.assertIn("outcome", result["spans"][0]["data"])
+
+    def test_token_counts_survive_scrubbing(self) -> None:
+        event = self._event_with_span(
+            {
+                "gen_ai.usage.input_tokens": 120,
+                "gen_ai.usage.output_tokens": 80,
+                "gen_ai.usage.total_tokens": 200,
+                "gen_ai.request.model": "gemma-4",
+                "apk_xray.token_source": "response_metadata",
+            }
+        )
+        result = self._scrub(event)
+        assert result is not None
+        data = result["spans"][0]["data"]
+        self.assertEqual(data["gen_ai.usage.input_tokens"], 120)
+        self.assertEqual(data["gen_ai.usage.output_tokens"], 80)
+        self.assertEqual(data["gen_ai.usage.total_tokens"], 200)
+        self.assertEqual(data["gen_ai.request.model"], "gemma-4")
+        self.assertEqual(data["apk_xray.token_source"], "response_metadata")
+
+    def test_google_api_key_in_exception_value_is_removed(self) -> None:
+        event: dict[str, Any] = {
+            "exception": {
+                "values": [
+                    {
+                        "type": "GemmaError",
+                        "value": "Request failed: AIzaSyFakeKey12345678901234567890123456",
+                        "stacktrace": {"frames": []},
+                    }
+                ]
+            }
+        }
+        result = self._scrub(event)
+        assert result is not None
+        self.assertNotIn("value", result["exception"]["values"][0])
+
+    def test_api_key_header_in_gemma_request_event_is_filtered(self) -> None:
+        event: dict[str, Any] = {
+            "request": {
+                "headers": {
+                    "x-goog-api-key": "AIzaSyFakeKey12345678901234567890123456",
+                    "Content-Type": "application/json",
+                }
+            }
+        }
+        result = self._scrub(event)
+        assert result is not None
+        self.assertEqual(
+            result["request"]["headers"]["x-goog-api-key"], "[Filtered]"
+        )
+        self.assertEqual(
+            result["request"]["headers"]["Content-Type"], "application/json"
+        )
 
 
 if __name__ == "__main__":

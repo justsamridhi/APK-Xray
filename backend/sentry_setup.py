@@ -6,17 +6,23 @@ APK-Xray handles potentially sensitive application artefacts.  The following
 are *never* forwarded to Sentry:
 
 - APK bytes, filenames, or local filesystem paths
-- Request or response bodies
+- Request or response bodies, including Gemma prompts and model responses
 - API keys, credentials, or authorisation headers
-- Raw evidence items, Gemma prompts / responses, or complete report objects
+- Raw evidence items, permission arrays, component names, or report contents
+- Package names, report identifiers, or any APK-derived values
 - Any PII collected by the SDK's default instrumentation
 
-Only low-cardinality operational attributes are attached to spans:
-``stage``, ``outcome``, ``error_category``, and ``apk_size_bytes``.
+Permitted span attributes (explicit allowlist in ``_SPAN_DATA_ALLOWLIST``):
+- Operational: ``stage``, ``outcome``, ``error_category``, ``apk_size_bytes``
+- GenAI: ``gen_ai.system``, ``gen_ai.operation.name``,
+  ``gen_ai.usage.input_tokens``, ``gen_ai.usage.output_tokens``,
+  ``gen_ai.usage.total_tokens``, ``gen_ai.request.model``,
+  ``apk_xray.retry_count``, ``apk_xray.token_source``
 
 The ``scrub_event`` hook is registered as both ``before_send`` and
-``before_send_transaction`` so every event type passes through the same
-sanitisation pipeline regardless of how it was captured.
+``before_send_transaction``.  It is the single chokepoint for privacy
+enforcement: every event passes through it unconditionally before leaving
+the process.
 """
 
 from __future__ import annotations
@@ -53,6 +59,28 @@ _SENSITIVE_VALUE_RE = re.compile(
     r"|bearer\s+\S+"                   # Bearer token
     r"|api[_-]?key\s*[:=]\s*\S+"      # Generic key assignment
     r")",
+)
+
+# Explicit allowlist of span data keys permitted to leave the process.
+# Everything else is stripped by ``_scrub_span_data``.
+_SPAN_DATA_ALLOWLIST: frozenset[str] = frozenset(
+    {
+        # ---- operational ----
+        "stage",
+        "outcome",
+        "error_category",
+        "apk_size_bytes",
+        # ---- GenAI (OTel semantic conventions, Sentry GenAI module) ----
+        "gen_ai.system",            # provider category: "google_gemini"
+        "gen_ai.operation.name",    # "chat" / "generate"
+        "gen_ai.request.model",     # model identifier without credentials
+        "gen_ai.usage.input_tokens",
+        "gen_ai.usage.output_tokens",
+        "gen_ai.usage.total_tokens",
+        # ---- APK-Xray-specific ----
+        "apk_xray.retry_count",     # 0 = no retry, 1 = one retry occurred
+        "apk_xray.token_source",    # "response_metadata" | "unavailable"
+    }
 )
 
 _INITIALISED = False
@@ -103,7 +131,7 @@ def _scrub_exception(exc_info: Any) -> Any:
     for exc in values:
         if not isinstance(exc, dict):
             continue
-        # Strip exception context that may contain report dicts or paths.
+        # Strip exception message — may contain provider error details or paths.
         exc.pop("value", None)
         mechanism = exc.get("mechanism")
         if isinstance(mechanism, dict):
@@ -137,12 +165,17 @@ def _scrub_contexts(event: dict[str, Any]) -> None:
 
 
 def _scrub_span_data(span: dict[str, Any]) -> dict[str, Any]:
-    """Keep only low-cardinality operational attributes on a span."""
+    """Keep only explicitly allowlisted attributes on a span.
+
+    The allowlist (``_SPAN_DATA_ALLOWLIST``) covers operational attributes
+    and a subset of OTel GenAI semantic conventions.  Everything else —
+    including any APK-derived value, token string, or provider detail that
+    does not appear in the allowlist — is stripped.
+    """
     data = span.get("data")
     if not isinstance(data, dict):
         return span
-    allowed = {"stage", "outcome", "error_category", "apk_size_bytes"}
-    span["data"] = {k: v for k, v in data.items() if k in allowed}
+    span["data"] = {k: v for k, v in data.items() if k in _SPAN_DATA_ALLOWLIST}
     return span
 
 
@@ -152,7 +185,8 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] |
     Called by the SDK before every event and transaction envelope is sent.
     Returns the sanitised event, or ``None`` to drop it entirely.
 
-    This function is the single chokepoint for privacy enforcement.
+    This function is the single chokepoint for privacy enforcement and is
+    applied to both error events and transaction/performance envelopes.
     Unit-tested directly in ``test_sentry.py``.
     """
     # --- request block ---
@@ -175,14 +209,12 @@ def scrub_event(event: dict[str, Any], hint: dict[str, Any]) -> dict[str, Any] |
     # --- contexts ---
     _scrub_contexts(event)
 
-    # --- transaction name: replace with a fixed safe placeholder ---
+    # --- transaction name: normalise dynamic segments ---
     # The SDK may set the transaction name from the URL which could include
     # a report ID or package name.
     if "transaction" in event:
-        # Normalise dynamic segments out of transaction names.
         txn = event["transaction"]
         if isinstance(txn, str):
-            # Replace anything after /report/ with a placeholder.
             txn = re.sub(r"(/report/)[^/\s]+", r"\1{report_id}", txn)
             event["transaction"] = txn
 
@@ -265,14 +297,9 @@ def sentry_span(
     When Sentry is not initialised or the SDK is absent the context manager
     is a transparent no-op — no import error, no performance cost.
 
-    Usage::
-
-        with sentry_span("apk.parse", "Parse APK manifest") as span:
-            span.set_data("stage", "parse")
-            result = parse_apk(path)
-
-    Only the attributes listed in ``_scrub_span_data`` survive sanitisation:
-    ``stage``, ``outcome``, ``error_category``, ``apk_size_bytes``.
+    Only the attributes listed in ``_SPAN_DATA_ALLOWLIST`` survive
+    sanitisation.  Do not attach APK-derived values, filenames, package
+    names, prompts, model responses, or any high-cardinality data.
     """
     try:
         import sentry_sdk as _sentry_sdk
@@ -284,10 +311,41 @@ def sentry_span(
         yield span
 
 
+def capture_gemma_error(exc: Exception, *, is_expected: bool) -> None:
+    """Capture a Gemma failure in Sentry without duplicate reporting.
+
+    Expected ``GemmaError`` failures (timeouts, rate limits, contract
+    violations) are recorded only as breadcrumb-free error events so that
+    they are observable but not treated as unhandled server errors.
+
+    Unexpected exceptions should be left to propagate naturally so that
+    FastAPI's Sentry integration captures them through the standard path,
+    avoiding duplicate events.
+
+    ``is_expected=True`` means the application handles this failure
+    gracefully and the deterministic report is still returned.
+    """
+    if not is_expected:
+        return  # let FastAPI/Starlette integration handle it
+
+    try:
+        import sentry_sdk as _sentry_sdk
+
+        with _sentry_sdk.push_scope() as scope:
+            # Strip all context that might contain provider details.
+            scope.clear_breadcrumbs()
+            scope.set_extra("stage", "gemma_explanation")
+            # Capture only the exception type, not the message.
+            scope.fingerprint = ["gemma_expected_failure", type(exc).__name__]
+            _sentry_sdk.capture_exception(exc)
+    except Exception:  # noqa: BLE001
+        pass  # telemetry failure must never mask application behaviour
+
+
 class _NoopSpan:
     """Drop-in replacement when the SDK is not installed or not initialised."""
 
-    def set_data(self, _key: str, _value: object) -> None:  # noqa: D401
+    def set_data(self, _key: str, _value: object) -> None:
         pass
 
     def set_status(self, _status: str) -> None:

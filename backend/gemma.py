@@ -239,6 +239,36 @@ def _parse_generated_json(text: str) -> dict[str, Any]:
     return candidates[0]
 
 
+def _extract_token_counts(envelope: Any) -> dict[str, int | None]:
+    """Extract token usage from the Gemini API ``usageMetadata`` block.
+
+    The Gemini API returns a top-level ``usageMetadata`` object alongside
+    ``candidates``.  Fields present in current API versions:
+    ``promptTokenCount``, ``candidatesTokenCount``, ``totalTokenCount``.
+
+    Returns a dict with ``input``, ``output``, and ``total`` keys.
+    Values are ``None`` when the field is absent or non-integer.
+
+    This function never raises.  If the envelope is malformed or the field
+    is absent, all values are ``None`` and the caller records the source as
+    ``"unavailable"``.
+    """
+    if not isinstance(envelope, dict):
+        return {"input": None, "output": None, "total": None}
+    usage = envelope.get("usageMetadata")
+    if not isinstance(usage, dict):
+        return {"input": None, "output": None, "total": None}
+
+    def _int_or_none(value: Any) -> int | None:
+        return value if isinstance(value, int) and value >= 0 else None
+
+    return {
+        "input": _int_or_none(usage.get("promptTokenCount")),
+        "output": _int_or_none(usage.get("candidatesTokenCount")),
+        "total": _int_or_none(usage.get("totalTokenCount")),
+    }
+
+
 def explain(
     endpoint: str,
     api_key: str | None,
@@ -289,63 +319,147 @@ def explain(
             raise GemmaError("APK_XRAY_GEMMA_TIMEOUT must be a number.") from error
         if request_timeout <= 0:
             raise GemmaError("APK_XRAY_GEMMA_TIMEOUT must be greater than zero.")
+
+    # ------------------------------------------------------------------
+    # Import the span helper lazily.  If Sentry is absent or disabled
+    # the noop path is taken and instrumentation has zero cost.
+    # ------------------------------------------------------------------
+    try:
+        from .sentry_setup import sentry_span as _sentry_span
+    except ImportError:
+        class _NoopCtx:  # type: ignore[no-redef]
+            def __enter__(self) -> "_NoopSpanInner":
+                return _NoopSpanInner()
+            def __exit__(self, *_: object) -> None:
+                pass
+        class _NoopSpanInner:
+            def set_data(self, _k: str, _v: object) -> None: pass
+            def set_status(self, _s: str) -> None: pass
+        def _sentry_span(op: str, description: str) -> "_NoopCtx":  # type: ignore[misc]
+            return _NoopCtx()
+
     body: bytes | None = None
-    for attempt in range(2):
-        try:
-            with urllib.request.urlopen(request, timeout=request_timeout) as response:
-                body = response.read(MAX_RESPONSE_BYTES + 1)
-            break
-        except (TimeoutError, socket.timeout) as error:
-            if attempt == 1:
-                raise GemmaError(
-                    "Gemma request timed out.",
-                    code="gemma_timeout",
-                ) from error
-        except urllib.error.HTTPError as error:
-            raise GemmaError(f"Gemma request returned HTTP {error.code}.") from error
-        except urllib.error.URLError as error:
-            if isinstance(error.reason, (TimeoutError, socket.timeout)):
+    retry_count = 0
+
+    # ------------------------------------------------------------------
+    # gen_ai.generate: surrounds the actual HTTP call to the model
+    # endpoint, including the one-retry-on-timeout policy.
+    # ------------------------------------------------------------------
+    with _sentry_span("gen_ai.generate", "Gemma 4 generate") as gen_span:
+        gen_span.set_data("gen_ai.system", "google_gemini")
+        gen_span.set_data("gen_ai.operation.name", "generate")
+        gen_span.set_data("gen_ai.request.model", "gemma-4")
+
+        for attempt in range(2):
+            try:
+                with urllib.request.urlopen(request, timeout=request_timeout) as response:
+                    body = response.read(MAX_RESPONSE_BYTES + 1)
+                break
+            except (TimeoutError, socket.timeout) as error:
                 if attempt == 1:
+                    gen_span.set_data("outcome", "timeout")
+                    gen_span.set_data("apk_xray.retry_count", 1)
                     raise GemmaError(
                         "Gemma request timed out.",
                         code="gemma_timeout",
                     ) from error
-                continue
-            raise GemmaError(f"Gemma request failed: {error.reason}") from error
-        except OSError as error:
-            raise GemmaError(f"Gemma request failed: {error}") from error
-    if body is None:
-        raise GemmaError("Gemma request timed out.", code="gemma_timeout")
-    if not body:
-        raise GemmaError("Gemma response was empty.")
-    if len(body) > MAX_RESPONSE_BYTES:
-        raise GemmaError("Gemma response exceeded the 2 MiB limit.")
+                retry_count = 1
+            except urllib.error.HTTPError as error:
+                outcome = "rate_limit" if error.code == 429 else "provider_error"
+                gen_span.set_data("outcome", outcome)
+                gen_span.set_data("apk_xray.retry_count", retry_count)
+                raise GemmaError(f"Gemma request returned HTTP {error.code}.") from error
+            except urllib.error.URLError as error:
+                if isinstance(error.reason, (TimeoutError, socket.timeout)):
+                    if attempt == 1:
+                        gen_span.set_data("outcome", "timeout")
+                        gen_span.set_data("apk_xray.retry_count", 1)
+                        raise GemmaError(
+                            "Gemma request timed out.",
+                            code="gemma_timeout",
+                        ) from error
+                    retry_count = 1
+                    continue
+                gen_span.set_data("outcome", "network_error")
+                gen_span.set_data("apk_xray.retry_count", retry_count)
+                raise GemmaError(f"Gemma request failed: {error.reason}") from error
+            except OSError as error:
+                gen_span.set_data("outcome", "network_error")
+                gen_span.set_data("apk_xray.retry_count", retry_count)
+                raise GemmaError(f"Gemma request failed: {error}") from error
+
+        if body is None:
+            gen_span.set_data("outcome", "timeout")
+            gen_span.set_data("apk_xray.retry_count", 1)
+            raise GemmaError("Gemma request timed out.", code="gemma_timeout")
+        if not body:
+            gen_span.set_data("outcome", "empty_response")
+            gen_span.set_data("apk_xray.retry_count", retry_count)
+            raise GemmaError("Gemma response was empty.")
+        if len(body) > MAX_RESPONSE_BYTES:
+            gen_span.set_data("outcome", "response_too_large")
+            gen_span.set_data("apk_xray.retry_count", retry_count)
+            raise GemmaError("Gemma response exceeded the 2 MiB limit.")
+
+        # Successful HTTP exchange — record retry count.
+        gen_span.set_data("apk_xray.retry_count", retry_count)
+
+    # ------------------------------------------------------------------
+    # gen_ai.validate: parse the envelope, extract generated text,
+    # validate the contract, and record token usage.
+    # Token counts come from ``usageMetadata`` in the Gemini API
+    # response.  If absent, the source is recorded as "unavailable".
+    # ------------------------------------------------------------------
     envelope: Any = None
     generated_text: str | None = None
-    try:
-        envelope = json.loads(body)
-        if diagnostics:
-            print(
-                "GEMMA_DIAGNOSTICS "
-                + _response_diagnostics(envelope),
-                file=sys.stderr,
+
+    with _sentry_span("gen_ai.validate", "Validate Gemma response") as val_span:
+        val_span.set_data("gen_ai.system", "google_gemini")
+        try:
+            envelope = json.loads(body)
+            if diagnostics:
+                print(
+                    "GEMMA_DIAGNOSTICS "
+                    + _response_diagnostics(envelope),
+                    file=sys.stderr,
+                )
+                for part_diagnostic in _part_diagnostics(envelope):
+                    print(f"GEMMA_DIAGNOSTICS {part_diagnostic}", file=sys.stderr)
+
+            # Record token usage from the response envelope.
+            tokens = _extract_token_counts(envelope)
+            if tokens["input"] is not None:
+                val_span.set_data("gen_ai.usage.input_tokens", tokens["input"])
+            if tokens["output"] is not None:
+                val_span.set_data("gen_ai.usage.output_tokens", tokens["output"])
+            if tokens["total"] is not None:
+                val_span.set_data("gen_ai.usage.total_tokens", tokens["total"])
+            token_source = (
+                "response_metadata"
+                if any(v is not None for v in tokens.values())
+                else "unavailable"
             )
-            for part_diagnostic in _part_diagnostics(envelope):
-                print(f"GEMMA_DIAGNOSTICS {part_diagnostic}", file=sys.stderr)
-        generated_text = _extract_generated_text(envelope)
-        return _validate(
-            _parse_generated_json(generated_text),
-            {item["id"] for item in evidence},
-        )
-    except json.JSONDecodeError as error:
-        raise GemmaError(
-            "Gemma response envelope was not valid JSON."
-        ) from error
-    except GemmaError as error:
-        if envelope is not None:
-            details = f" ({_response_diagnostics(envelope)}"
-            if generated_text is not None:
-                details += f", generated_length={len(generated_text)}"
-            details += ")"
-            raise GemmaError(f"{error}{details}") from error
-        raise
+            val_span.set_data("apk_xray.token_source", token_source)
+
+            generated_text = _extract_generated_text(envelope)
+            result = _validate(
+                _parse_generated_json(generated_text),
+                {item["id"] for item in evidence},
+            )
+            val_span.set_data("outcome", "ok")
+            return result
+
+        except json.JSONDecodeError as error:
+            val_span.set_data("outcome", "invalid_json")
+            raise GemmaError(
+                "Gemma response envelope was not valid JSON."
+            ) from error
+        except GemmaError as error:
+            val_span.set_data("outcome", "contract_violation")
+            if envelope is not None:
+                details = f" ({_response_diagnostics(envelope)}"
+                if generated_text is not None:
+                    details += f", generated_length={len(generated_text)}"
+                details += ")"
+                raise GemmaError(f"{error}{details}") from error
+            raise

@@ -109,7 +109,7 @@ async def upload(file: UploadFile = File(...)) -> JSONResponse:
                     output.write(chunk)
 
             # ------------------------------------------------------------------
-            # Stage 1: APK parsing
+            # Stage 1 — apk.parse: manifest extraction via Androguard
             # ------------------------------------------------------------------
             with sentry_span("apk.parse", "Parse APK manifest") as span:
                 span.set_data("stage", "parse")
@@ -122,44 +122,54 @@ async def upload(file: UploadFile = File(...)) -> JSONResponse:
                     raise
 
             # ------------------------------------------------------------------
-            # Stage 2: Gemma explanation (optional)
+            # Stage 2 — apk.rules: deterministic security evaluation
+            # The rules engine is the security authority; Gemma cannot alter
+            # findings, severity, or the score.
             # ------------------------------------------------------------------
+            # (scoring runs inside build_report; the separate apk.rules span
+            #  marks its boundary for trace readability)
             gemma_callable = None
             if settings.gemma_endpoint:
+                # The closure captures settings by reference; no APK-derived
+                # values are stored in the span — those live inside gemma.py's
+                # gen_ai.generate / gen_ai.validate spans.
                 def gemma_callable(value: dict) -> dict:  # type: ignore[misc]
-                    with sentry_span("gemma.explain", "Gemma AI explanation") as gspan:
-                        gspan.set_data("stage", "gemma")
-                        try:
-                            result = explain(
-                                settings.gemma_endpoint or "",
-                                settings.gemma_api_key,
-                                value,
-                                settings.gemma_timeout_seconds,
-                            )
-                            gspan.set_data("outcome", "ok")
-                            return result
-                        except GemmaError as exc:
-                            # Expected failures — graceful degradation preserved.
-                            gspan.set_data("outcome", "gemma_error")
-                            gspan.set_data("error_category", exc.code)
-                            raise
+                    # GemmaError is an expected, handled failure.
+                    # gen_ai.* spans are created inside explain() itself.
+                    return explain(
+                        settings.gemma_endpoint or "",
+                        settings.gemma_api_key,
+                        value,
+                        settings.gemma_timeout_seconds,
+                    )
 
             # ------------------------------------------------------------------
-            # Stage 3: Report building (scoring + schema validation)
+            # Stage 3 — apk.report: scoring + optional AI + schema validation
+            # GemmaError is a known, gracefully-handled failure path.
+            # It must not become an unhandled-server-error event in Sentry.
             # ------------------------------------------------------------------
-            with sentry_span("report.build", "Build and validate report") as span:
+            with sentry_span("apk.report", "Build and validate report") as span:
                 span.set_data("stage", "build")
+                gemma_ok: bool | None = None
                 try:
                     report = build_report(facts, gemma_callable)
+                    gemma_ok = report.get("ai", {}).get("status") == "available"
                     span.set_data("outcome", "ok")
+                    span.set_data(
+                        "error_category",
+                        "none" if gemma_ok or gemma_callable is None else "gemma_degraded",
+                    )
                 except ValueError:
                     span.set_data("outcome", "schema_error")
                     raise
+                # GemmaError is caught inside build_report and results in a
+                # gracefully-degraded report (ai.status = "error").
+                # It never propagates here, so no explicit catch is needed.
 
         # ----------------------------------------------------------------------
-        # Stage 4: Persist report
+        # Stage 4 — apk.persist: SQLite persistence
         # ----------------------------------------------------------------------
-        with sentry_span("report.save", "Persist report to SQLite") as span:
+        with sentry_span("apk.persist", "Persist report to SQLite") as span:
             span.set_data("stage", "save")
             try:
                 save_report(report)

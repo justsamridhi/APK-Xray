@@ -132,19 +132,46 @@ application behaves identically to a build without Sentry.
 Leave both variables unset or set `SENTRY_DSN=` in your environment.
 All tests run completely offline and never contact a Sentry endpoint.
 
-### Traced pipeline stages
+### Real analysis trace structure
 
-Each upload request creates child spans for:
+Each `POST /api/upload` request creates a Sentry transaction with the
+following child spans:
 
-| Span op | Description |
-| --- | --- |
-| `apk.parse` | Androguard manifest extraction |
-| `gemma.explain` | Optional AI explanation (skipped when no endpoint is configured) |
-| `report.build` | Deterministic scoring and schema validation |
-| `report.save` | SQLite persistence |
+```
+POST /api/upload                             ← FastAPI transaction
+  apk.parse       Parse APK manifest         ← Androguard extraction
+  apk.report      Build and validate report  ← scoring + Gemma + schema
+    gen_ai.generate  Gemma 4 generate        ← actual HTTP call to Gemini API
+    gen_ai.validate  Validate Gemma response ← JSON parsing + contract check
+  apk.persist     Persist report to SQLite   ← SQLite write
+```
 
-Spans carry only low-cardinality operational attributes: `stage`, `outcome`,
-`error_category`, and `apk_size_bytes`.
+The `gen_ai.*` spans are created inside `backend/gemma.py` at the exact
+network/model call boundary.
+
+### GenAI attributes recorded
+
+| Attribute | Source | Notes |
+| --- | --- | --- |
+| `gen_ai.system` | constant | `"google_gemini"` |
+| `gen_ai.operation.name` | constant | `"generate"` |
+| `gen_ai.request.model` | constant | `"gemma-4"` |
+| `gen_ai.usage.input_tokens` | `usageMetadata.promptTokenCount` | `None` when absent |
+| `gen_ai.usage.output_tokens` | `usageMetadata.candidatesTokenCount` | `None` when absent |
+| `gen_ai.usage.total_tokens` | `usageMetadata.totalTokenCount` | `None` when absent |
+| `apk_xray.retry_count` | runtime | `0` = no retry, `1` = one retry occurred |
+| `apk_xray.token_source` | runtime | `"response_metadata"` or `"unavailable"` |
+| `outcome` | runtime | `ok`, `timeout`, `rate_limit`, `provider_error`, `network_error`, `invalid_json`, `contract_violation` |
+
+Token counts are measured from the Gemini API `usageMetadata` field only.
+They are never estimated. Cost is not calculated.
+
+### Timeout and failure behaviour
+
+When Gemma times out, the `gen_ai.generate` span records `outcome=timeout`
+and `apk_xray.retry_count=1`. The report is returned with all deterministic
+findings intact; only `ai.status` changes to `"error"`. The API returns
+HTTP 200, not a 500.
 
 ### Privacy controls
 
@@ -159,27 +186,33 @@ process it removes:
 - All breadcrumbs
 - `extra` and `user` blocks
 - All SDK contexts except `trace`
-- Non-allowlisted span `data` attributes (only `stage`, `outcome`,
-  `error_category`, `apk_size_bytes` survive)
-- Dynamic segments in transaction names (`/api/report/<id>` →
-  `/api/report/{report_id}`)
+- Transaction names normalised (`/api/report/<id>` → `/api/report/{report_id}`)
+- Span `data` filtered to an explicit allowlist — only operational and GenAI
+  attributes survive; prompts, model responses, package names, evidence,
+  and paths are stripped unconditionally
 
 `send_default_pii=False` and `max_request_body_size="never"` are set at
-initialisation as a first line of defence; `scrub_event` is a second,
-independent layer.
+initialisation as a first-layer defence; `scrub_event` is a second,
+independent layer applied to every event.
 
 ### Manual dashboard verification
 
 After configuring a real DSN and uploading a test APK:
 
 1. Confirm the transaction appears under the configured project.
-2. Verify each span (`apk.parse`, `report.build`, `report.save`) is present.
-3. Check that no request body, filename, path, API key, or raw evidence
-   appears in the event detail, breadcrumbs, contexts, or span data.
-4. Confirm the transaction name is `/api/upload`, not a path with a report ID.
+2. Verify the span tree: `apk.parse` → `apk.report` → `gen_ai.generate` →
+   `gen_ai.validate` → `apk.persist`.
+3. Check that `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
+   `apk_xray.retry_count`, and `apk_xray.token_source` appear on
+   `gen_ai.generate`.
+4. Verify that no request body, filename, path, API key, package name,
+   evidence array, or raw model response appears anywhere in the event.
+5. Confirm the transaction name is `POST /api/upload`.
+6. Reproduce a timeout with a short `APK_XRAY_GEMMA_TIMEOUT` and confirm
+   `outcome=timeout`, `apk_xray.retry_count=1` on `gen_ai.generate`.
 
-No automated test covers live Sentry dashboard output; that step requires
-manual verification with real credentials.
+No automated test covers live Sentry dashboard output; all claims above
+require manual verification with real credentials.
 
 ## Limitations
 
