@@ -4,6 +4,28 @@ from __future__ import annotations
 
 import os
 from dataclasses import dataclass
+from pathlib import Path
+
+# Load .env once at module import for local development.
+# Production deployments inject environment variables directly.
+_ENV_LOADED = False
+
+def _ensure_env_loaded() -> None:
+    """Load .env from the project root exactly once."""
+    global _ENV_LOADED
+    if _ENV_LOADED:
+        return
+    try:
+        from dotenv import load_dotenv
+        # Load from project root (.env), NOT backend/.env
+        # backend/config.py -> backend/ -> project_root/
+        root_dir = Path(__file__).parent.parent
+        env_path = root_dir / ".env"
+        if env_path.exists():
+            load_dotenv(dotenv_path=env_path, override=False)
+    except ImportError:
+        pass  # dotenv not installed; rely on process environment
+    _ENV_LOADED = True
 
 
 @dataclass(frozen=True)
@@ -17,6 +39,8 @@ class Settings:
 
 
 def load_settings() -> Settings:
+    _ensure_env_loaded()
+
     def integer(name: str, default: int) -> int:
         raw = os.getenv(name)
         if raw is None:

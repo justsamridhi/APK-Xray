@@ -29,7 +29,13 @@ content type. The default maximum upload size is 50 MiB.
 ## Configuration
 
 Configuration is read from the process environment by `backend/config.py`.
-The application does not automatically load a `.env` file.
+
+In **local development**, the `.env` file in the **project root** (not `backend/.env`)
+is automatically loaded via `python-dotenv` when `load_settings()` is first called.
+Production deployments should inject environment variables directly via container
+orchestration or hosting platform environment configuration.
+
+`.env` is listed in `.gitignore` — never commit it.
 
 | Variable | Default | Behavior |
 | --- | --- | --- |
@@ -38,6 +44,8 @@ The application does not automatically load a `.env` file.
 | `GEMMA4_API_KEY` | unset | Required by the Gemma adapter; never log or commit it. |
 | `APK_XRAY_GEMMA_TIMEOUT` | `90` | Positive timeout in seconds. The adapter retries once on timeout only. |
 | `APK_XRAY_GEMMA_DIAGNOSTICS` | unset | Set to `1` only for redacted live-verifier part diagnostics. |
+| `SENTRY_DSN` | unset | Sentry project DSN. When set, enables error tracking and performance tracing. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of requests to trace (0.0 to 1.0). Use `1.0` for local testing. |
 
 Copy [`.env.example`](.env.example) as a reference only; environment files
 containing credentials must remain local. If Gemma is not configured, reports
