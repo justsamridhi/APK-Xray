@@ -113,6 +113,74 @@ package metadata, permissions, and manifest components, and emits stable
 evidence IDs. Invalid, truncated, or unsupported inputs become explicit API
 errors.
 
+## Sentry tracing
+
+Optional stage-level performance and error tracing via the Sentry SDK.
+
+### Environment variables
+
+| Variable | Default | Behaviour |
+| --- | --- | --- |
+| `SENTRY_DSN` | unset | Enables Sentry when set to a non-empty DSN string. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of transactions to sample (`0.0`–`1.0`). `0.0` disables performance traces; errors are still captured when a DSN is set. |
+
+When `SENTRY_DSN` is absent or empty the SDK is not initialised and the
+application behaves identically to a build without Sentry.
+
+### Local setup (without real credentials)
+
+Leave both variables unset or set `SENTRY_DSN=` in your environment.
+All tests run completely offline and never contact a Sentry endpoint.
+
+### Traced pipeline stages
+
+Each upload request creates child spans for:
+
+| Span op | Description |
+| --- | --- |
+| `apk.parse` | Androguard manifest extraction |
+| `gemma.explain` | Optional AI explanation (skipped when no endpoint is configured) |
+| `report.build` | Deterministic scoring and schema validation |
+| `report.save` | SQLite persistence |
+
+Spans carry only low-cardinality operational attributes: `stage`, `outcome`,
+`error_category`, and `apk_size_bytes`.
+
+### Privacy controls
+
+The `scrub_event` function in `backend/sentry_setup.py` is registered as both
+`before_send` and `before_send_transaction`.  Before any event leaves the
+process it removes:
+
+- Request body, URL, query string, cookies, and environment block
+- Sensitive headers: `Authorization`, `x-goog-api-key`, `x-api-key`, `Cookie`,
+  and others (matched case-insensitively)
+- Exception `value` strings and all local variable snapshots (`frame.vars`)
+- All breadcrumbs
+- `extra` and `user` blocks
+- All SDK contexts except `trace`
+- Non-allowlisted span `data` attributes (only `stage`, `outcome`,
+  `error_category`, `apk_size_bytes` survive)
+- Dynamic segments in transaction names (`/api/report/<id>` →
+  `/api/report/{report_id}`)
+
+`send_default_pii=False` and `max_request_body_size="never"` are set at
+initialisation as a first line of defence; `scrub_event` is a second,
+independent layer.
+
+### Manual dashboard verification
+
+After configuring a real DSN and uploading a test APK:
+
+1. Confirm the transaction appears under the configured project.
+2. Verify each span (`apk.parse`, `report.build`, `report.save`) is present.
+3. Check that no request body, filename, path, API key, or raw evidence
+   appears in the event detail, breadcrumbs, contexts, or span data.
+4. Confirm the transaction name is `/api/upload`, not a path with a report ID.
+
+No automated test covers live Sentry dashboard output; that step requires
+manual verification with real credentials.
+
 ## Limitations
 
 This is static declaration analysis. It cannot establish runtime behavior,
