@@ -1,7 +1,7 @@
 
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 
-import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, PrimaryButton, SecondaryButton, type IconName } from './components'
+import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, PrimaryButton, SecondaryButton, type IconName } from './ui-components'
 
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
 
@@ -9,7 +9,7 @@ import { themeStorageKey, type Theme } from './theme'
 
 import { sampleReport, type SampleFinding } from './sampleReport'
 
-import { type ReportData, type ReportFinding, type ReportLanguage } from './report'
+import { normalizeReport, type ReportData, type ReportFinding, type ReportLanguage } from './report'
 
 import { maxApkSize, upload, getReport, UploadError } from './api'
 
@@ -266,30 +266,57 @@ function ReportPage({
   useEffect(() => {
     let active = true
 
-    if (!reportId) {
-      setReport(null)
-      setStatus('empty')
+    if (activeReport && (!reportId || activeReport.raw.reportId === reportId)) {
+      setReport(activeReport)
+      setStatus('ready')
       return () => { active = false }
     }
 
-    if (activeReport?.raw.reportId === reportId) {
-      setReport(activeReport)
-      setStatus('ready')
+    if (reportId) {
+      setReport(null)
+      setStatus('loading')
+
+      getReport(reportId)
+        .then((result) => {
+          if (!active) return
+          if (result.raw.reportId !== reportId) {
+            throw new Error('The returned report ID does not match the requested report.')
+          }
+          setReport(result)
+          setStatus('ready')
+          onReport(result)
+        })
+        .catch(() => {
+          if (!active) return
+          setReport(null)
+          setStatus('error')
+        })
+
       return () => { active = false }
     }
 
     setReport(null)
     setStatus('loading')
 
-    getReport(reportId)
+    fetch(import.meta.env.VITE_API_REPORT_URL ?? '/api/report')
+      .then(async (response) => {
+        if (response.status === 404 || response.status === 400) return null
+        if (!response.ok) throw new Error(`Report request failed with status ${response.status}.`)
+        let payload: unknown
+        try { payload = await response.json() } catch { throw new Error('The report response was not valid JSON.') }
+        const result = normalizeReport(payload)
+        if (!result) throw new Error('The report was malformed.')
+        return result
+      })
       .then((result) => {
         if (!active) return
-        if (result.raw.reportId !== reportId) {
-          throw new Error('The returned report ID does not match the requested report.')
+        if (!result) {
+          setStatus('empty')
+        } else {
+          setReport(result)
+          setStatus('ready')
+          onReport(result)
         }
-        setReport(result)
-        setStatus('ready')
-        onReport(result)
       })
       .catch(() => {
         if (!active) return
@@ -302,7 +329,7 @@ function ReportPage({
 
   if (status === 'loading') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><LoadingSpinner label="Loading report…" /></Card></main>
 
-  if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Report unavailable</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The saved report could not be loaded. It may not exist or the analysis service may be unavailable." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>
+  if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The saved report could not be loaded. It may not exist or the analysis service may be unavailable." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>
 
   if (status === 'empty' || !report) return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState icon={reportIcon} title="No report yet" description="Upload an APK to generate a report, or explore the clearly labeled sample report." action={<div className="empty-actions"><a className="button button-primary" href="/">Go to Analyze</a><a className="text-link" href="/report/sample">View sample report</a></div>} /></Card></main>
 
@@ -467,5 +494,5 @@ export default function App() {
     }
   }, [theme])
 
-  return <NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report' || path.startsWith('/report/') ? <ReportPage activeReport={report} onReport={setReport} /> : path === '/report/sample' ? <SampleReportPage /> : path === '/about' ? <AboutPage /> : <AnalyzePage onReport={setReport} />}<footer className="footer demo-note"><span>STATIC ANALYSIS · EVIDENCE REVIEW</span><span>APKS ARE NEVER EXECUTED</span></footer></div></NavigationLayout>
+  return <><div className='ambient-glow' /><div className='grid-bg' /><div className='scanline' /><div className='bg-radial' /><div className='bg-radial-2' /><NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report/sample' ? <SampleReportPage /> : path === '/report' || path.startsWith('/report/') ? <ReportPage activeReport={report} onReport={setReport} /> : path === '/about' ? <AboutPage /> : <AnalyzePage onReport={setReport} />}<footer className="footer demo-note"><span>STATIC ANALYSIS · EVIDENCE REVIEW</span><span>APKS ARE NEVER EXECUTED</span></footer></div></NavigationLayout></>
 }

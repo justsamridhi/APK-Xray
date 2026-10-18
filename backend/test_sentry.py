@@ -114,6 +114,7 @@ def _make_envelope() -> dict[str, Any]:
                     "error_category": "none",
                     # allowlisted GenAI attributes
                     "gen_ai.system": "google_gemini",
+                    "gen_ai.agent.name": "apk_xray_explainer",
                     "gen_ai.operation.name": "generate",
                     "gen_ai.request.model": "gemma-4",
                     "gen_ai.usage.input_tokens": 120,
@@ -430,6 +431,7 @@ class ScrubEventTests(unittest.TestCase):
         assert result is not None
         span_data = result["spans"][0]["data"]
         self.assertIn("gen_ai.system", span_data)
+        self.assertIn("gen_ai.agent.name", span_data)
         self.assertIn("gen_ai.operation.name", span_data)
         self.assertIn("gen_ai.request.model", span_data)
         self.assertIn("gen_ai.usage.input_tokens", span_data)

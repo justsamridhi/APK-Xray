@@ -15,9 +15,9 @@ print("=" * 70)
 from pathlib import Path
 root_env = Path(__file__).parent / ".env"
 if not root_env.exists():
-    print(f"✗ .env file not found at: {root_env}")
+    print(f"[FAIL] .env file not found at: {root_env}")
     sys.exit(1)
-print(f"✓ .env file found at: {root_env}")
+print(f"[PASS] .env file found at: {root_env}")
 
 # Step 2: Load settings
 import backend.config as _config_mod
@@ -28,19 +28,19 @@ settings = load_settings()
 
 # Step 3: Verify DSN is loaded
 if not settings.sentry_dsn:
-    print("✗ SENTRY_DSN not loaded from .env")
+    print("[FAIL] SENTRY_DSN not loaded from .env")
     sys.exit(1)
 
 dsn_preview = settings.sentry_dsn[:50] + "..." if len(settings.sentry_dsn) > 50 else settings.sentry_dsn
-print(f"✓ SENTRY_DSN loaded: {dsn_preview}")
+print(f"[PASS] SENTRY_DSN loaded: {dsn_preview}")
 
 # Step 4: Verify sample rate is non-zero
 if settings.sentry_traces_sample_rate == 0.0:
-    print("✗ SENTRY_TRACES_SAMPLE_RATE is 0.0 - tracing disabled")
+    print("[FAIL] SENTRY_TRACES_SAMPLE_RATE is 0.0 - tracing disabled")
     print("  Add 'SENTRY_TRACES_SAMPLE_RATE=1.0' to .env")
     sys.exit(1)
 
-print(f"✓ SENTRY_TRACES_SAMPLE_RATE: {settings.sentry_traces_sample_rate}")
+print(f"[PASS] SENTRY_TRACES_SAMPLE_RATE: {settings.sentry_traces_sample_rate}")
 print(f"  ({settings.sentry_traces_sample_rate * 100:.0f}% of requests will be traced)")
 
 # Step 5: Initialize Sentry
@@ -52,10 +52,10 @@ import sentry_sdk
 client = sentry_sdk.get_client()
 
 if not client or not client.dsn:
-    print("✗ Sentry SDK not initialized")
+    print("[FAIL] Sentry SDK not initialized")
     sys.exit(1)
 
-print(f"✓ Sentry SDK initialized and active")
+print(f"[PASS] Sentry SDK initialized and active")
 
 # Step 7: Check integrations
 options = client.options if hasattr(client, 'options') else {}
@@ -66,20 +66,20 @@ fastapi_present = any('FastApi' in name for name in integration_names)
 starlette_present = any('Starlette' in name for name in integration_names)
 
 if fastapi_present:
-    print(f"✓ FastAPI integration enabled")
+    print(f"[PASS] FastAPI integration enabled")
 if starlette_present:
-    print(f"✓ Starlette integration enabled")
+    print(f"[PASS] Starlette integration enabled")
 
 if not (fastapi_present or starlette_present):
-    print("⚠ Warning: FastAPI/Starlette integrations not detected")
+    print("[WARN] FastAPI/Starlette integrations not detected")
 
 # Step 8: Import the API to confirm initialization order
 print("\nTesting API module import...")
 from backend.api import app
-print(f"✓ FastAPI app initialized")
+print(f"[PASS] FastAPI app initialized")
 
 print("=" * 70)
-print("✓ ALL CHECKS PASSED")
+print("[PASS] ALL CHECKS PASSED")
 print("=" * 70)
 print("\nNext steps:")
 print("  1. Start backend:")

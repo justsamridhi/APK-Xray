@@ -85,6 +85,7 @@ class AgentTracingTests(unittest.TestCase):
 
         # Verify spans recorded success
         ai_span_mock.set_data.assert_any_call("outcome", "ok")
+        ai_span_mock.set_data.assert_any_call("gen_ai.agent.name", "apk_xray_explainer")
         val_span_mock.set_data.assert_any_call("apk_xray.validation_outcome", "ok")
 
         # Verify AI status reflects success

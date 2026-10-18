@@ -78,6 +78,7 @@ The result describes observable capabilities and limitations, rather than claimi
 - **AI output validation:** Rejects malformed model responses and claims referencing unknown evidence identifiers.
 - **Graceful AI failure handling:** Keeps the deterministic report available when the explanation service is unavailable or returns an error.
 - **Interactive frontend:** Supports APK selection, upload progress, report rendering, evidence drawers, and language switching.
+- **Sentry Agent Tracing:** Full-stack observability into the AI explainer agent lifecycle, claim structure validation, token consumption, fallback paths, and distributed transactions without leaking secrets or APK binaries (see [Sentry Tracing](backend/README.md#sentry-tracing)).
 - **Automated tests:** Provides regression tests for supported backend and frontend functionality.
 
 ## Technology Stack
@@ -103,6 +104,7 @@ The result describes observable capabilities and limitations, rather than claimi
 | Deterministic Python rules | Security indicator evaluation and exposure scoring |
 | JSON Schema | Report structure and contract validation |
 | Google Gemma 4 API | Optional evidence-based explanation generation |
+| Sentry SDK | Privacy-safe OpenTelemetry GenAI agent tracing and observability |
 | Pytest | Backend testing and regression checks |
 
 ### Engineering and development tools

@@ -72,6 +72,7 @@ _SPAN_DATA_ALLOWLIST: frozenset[str] = frozenset(
         "apk_size_bytes",
         # ---- GenAI (OTel semantic conventions, Sentry GenAI module) ----
         "gen_ai.system",            # provider category: "google_gemini"
+        "gen_ai.agent.name",        # agent identifier: "apk_xray_explainer"
         "gen_ai.operation.name",    # "chat" / "generate"
         "gen_ai.request.model",     # model identifier without credentials
         "gen_ai.usage.input_tokens",

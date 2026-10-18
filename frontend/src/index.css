@@ -59,3 +59,20 @@ html, body, #root {
   outline: 2px solid var(--color-mint);
   outline-offset: 2px;
 }
+
+/* ============================================
+   AMBIENT GLOW MOUSE TRACKING
+   ============================================ */
+
+:root {
+  --mouse-x: 50%;
+  --mouse-y: 20%;
+}
+
+/* Update CSS custom properties on mouse move */
+@media (hover: hover) {
+  body:hover {
+    --mouse-x: 50%;
+    --mouse-y: 20%;
+  }
+}

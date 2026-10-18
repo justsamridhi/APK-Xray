@@ -1,0 +1,1764 @@
+<!DOCTYPE html>
+
+<html class="scroll-smooth" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1" name="viewport"/>
+<title>APK X-ray — Evidence-First Android Static Security</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800;900&amp;family=Manrope:wght@400;500;600;700;800&amp;family=JetBrains+Mono:wght@400;500;700&amp;display=swap" rel="stylesheet"/>
+<style>
+:root {
+  --bg-dark: #0a0b0e;
+  --bg-card: #12141a;
+  --bg-card-subtle: #171a22;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-focus: rgba(185, 224, 207, 0.4);
+  --text-main: #f5f6f8;
+  --text-mute: #8e94a0;
+  --text-dim: #5c6270;
+  
+  --mint: #b9e0cf;
+  --mint-glow: rgba(185, 224, 207, 0.25);
+  --lav: #d1c9f2;
+  --lav-glow: rgba(209, 201, 242, 0.25);
+  --peach: #f4d5c3;
+  --peach-glow: rgba(244, 213, 195, 0.25);
+  --sky: #c6def0;
+  --emerald: #a7f3d0;
+  --cyan: #bae6fd;
+  
+  --font-display: "Barlow Condensed", "Arial Narrow", sans-serif;
+  --font-body: "Manrope", -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+
+  --mouse-x: 50%;
+  --mouse-y: 20%;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-main);
+  font-family: var(--font-body);
+  line-height: 1.6;
+  overflow-x: hidden;
+  position: relative;
+  min-height: 100vh;
+}
+
+/* Dynamic Interactive Gradient & Scanline Background */
+.ambient-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  background: 
+    radial-gradient(800px circle at var(--mouse-x) var(--mouse-y), rgba(185, 224, 207, 0.08), transparent 70%),
+    radial-gradient(circle at 85% 35%, rgba(209, 201, 242, 0.06) 0%, transparent 55%),
+    radial-gradient(circle at 15% 75%, rgba(244, 213, 195, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 50% 90%, rgba(186, 230, 253, 0.04) 0%, transparent 60%);
+  transition: background 0.15s ease-out;
+}
+
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.02) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.02) 1px, transparent 1px);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Faint Sweeping Radar Scanline */
+.scanline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(180deg, transparent 0%, rgba(185, 224, 207, 0.04) 50%, rgba(185, 224, 207, 0.1) 98%, var(--mint) 100%);
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: 0;
+  animation: radarScan 10s linear infinite;
+}
+
+.container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 24px;
+  position: relative;
+  z-index: 1;
+}
+
+/* Navigation */
+.nav-wrap {
+  padding-top: 24px;
+  position: sticky;
+  top: 16px;
+  z-index: 100;
+  transition: transform 0.3s ease;
+}
+.navbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(18, 20, 26, 0.85);
+  backdrop-filter: blur(16px);
+  border: 1px solid var(--border);
+  border-radius: 9999px;
+  padding: 8px 12px 8px 24px;
+  box-shadow: 0 16px 36px rgba(0, 0, 0, 0.4);
+}
+.brand-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-decoration: none;
+  color: var(--text-main);
+}
+.brand-icon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #000;
+  border: 1px solid rgba(185, 224, 207, 0.3);
+  overflow: hidden;
+}
+.brand-icon img {
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+}
+.brand-name {
+  font-family: var(--font-display);
+  font-size: 22px;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.brand-tag {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-mute);
+  padding: 2px 7px;
+  border-radius: 4px;
+}
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.nav-link {
+  color: var(--text-mute);
+  text-decoration: none;
+  font-size: 14px;
+  font-weight: 600;
+  padding: 8px 16px;
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+.nav-link:hover {
+  color: var(--text-main);
+  background: rgba(255, 255, 255, 0.05);
+}
+.btn-primary {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--mint);
+  color: #0b1114;
+  font-weight: 700;
+  font-size: 14px;
+  padding: 10px 22px;
+  border-radius: 9999px;
+  text-decoration: none;
+  border: none;
+  cursor: pointer;
+  transition: all 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+  box-shadow: 0 4px 18px var(--mint-glow);
+}
+.btn-primary:hover {
+  transform: translateY(-2px) scale(1.02);
+  box-shadow: 0 6px 24px rgba(185, 224, 207, 0.4);
+}
+.btn-ghost {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--text-main);
+  font-weight: 600;
+  font-size: 14px;
+  padding: 10px 20px;
+  border-radius: 9999px;
+  text-decoration: none;
+  border: 1px solid var(--border);
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  transform: translateY(-1px);
+}
+
+/* Hero Section */
+.hero-section {
+  padding: 80px 0 60px;
+  text-align: center;
+  position: relative;
+}
+.hero-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(185, 224, 207, 0.1);
+  border: 1px solid rgba(185, 224, 207, 0.25);
+  color: var(--mint);
+  font-size: 13px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 6px 16px;
+  border-radius: 9999px;
+  margin-bottom: 24px;
+  animation: popIn 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+.hero-title-wrap {
+  position: relative;
+  display: inline-block;
+  margin-bottom: 24px;
+}
+.hero-title {
+  font-family: var(--font-display);
+  font-size: clamp(68px, 12vw, 136px);
+  font-weight: 900;
+  line-height: 0.88;
+  letter-spacing: 0.01em;
+  text-transform: uppercase;
+  color: #fff;
+  text-shadow: 0 8px 30px rgba(0,0,0,0.6);
+  user-select: none;
+}
+.hero-title span {
+  color: var(--mint);
+  display: inline-block;
+  animation: glowPulse 4s infinite alternate ease-in-out;
+}
+.hero-tag-angled {
+  position: absolute;
+  top: -12px;
+  right: -24px;
+  background: var(--mint);
+  color: #0b1114;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 16px;
+  letter-spacing: 0.04em;
+  padding: 6px 16px;
+  border-radius: 6px;
+  transform: rotate(-3deg);
+  box-shadow: 0 8px 20px rgba(0,0,0,0.3);
+  animation: floatAngled 3s ease-in-out infinite alternate;
+}
+
+/* Typewriter Banner */
+.typewriter-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 26, 34, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 24px;
+  margin: 0 auto 32px;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  color: var(--lav);
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+}
+.typewriter-prefix {
+  color: var(--text-dim);
+  margin-right: 10px;
+}
+.typewriter-text {
+  color: #fff;
+  font-weight: 600;
+  position: relative;
+  white-space: pre;
+}
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: var(--mint);
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: blink 0.9s infinite;
+}
+
+.hero-sub {
+  max-width: 680px;
+  margin: 0 auto 36px;
+  color: var(--text-mute);
+  font-size: 18px;
+  line-height: 1.6;
+}
+
+.hero-actions {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin-bottom: 56px;
+}
+
+/* Live Interactive Scanner Deck */
+.scanner-deck {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 32px;
+  box-shadow: 0 32px 80px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255,255,255,0.03);
+  max-width: 1040px;
+  margin: 0 auto;
+  position: relative;
+  overflow: hidden;
+  text-align: left;
+}
+.scanner-deck::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: linear-gradient(90deg, transparent, var(--mint), var(--lav), transparent);
+}
+.deck-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 24px;
+  padding-bottom: 20px;
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+  gap: 16px;
+}
+.deck-title-group {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.radar-dot {
+  width: 10px;
+  height: 10px;
+  background: var(--mint);
+  border-radius: 50%;
+  box-shadow: 0 0 12px var(--mint);
+  position: relative;
+}
+.radar-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 1px solid var(--mint);
+  animation: ripple 2s infinite ease-out;
+}
+.deck-title {
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+.deck-tabs {
+  display: flex;
+  gap: 6px;
+  background: rgba(0, 0, 0, 0.4);
+  padding: 4px;
+  border-radius: 9999px;
+  border: 1px solid var(--border);
+}
+.deck-tab {
+  padding: 7px 16px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: none;
+  background: none;
+  color: var(--text-mute);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.deck-tab.active {
+  background: var(--bg-card-subtle);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+}
+
+/* Interactive Dropzone */
+.interactive-dropzone {
+  border: 2px dashed rgba(255, 255, 255, 0.12);
+  border-radius: 20px;
+  padding: 34px 24px;
+  text-align: center;
+  background: rgba(0, 0, 0, 0.2);
+  cursor: pointer;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  position: relative;
+  overflow: hidden;
+}
+.interactive-dropzone:hover, .interactive-dropzone.drag-active {
+  border-color: var(--mint);
+  background: rgba(185, 224, 207, 0.04);
+  transform: translateY(-2px);
+}
+.drop-icon-wrap {
+  width: 56px;
+  height: 56px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 16px;
+  border: 1px solid var(--border);
+  transition: all 0.3s ease;
+}
+.interactive-dropzone:hover .drop-icon-wrap {
+  background: var(--mint);
+  color: #0b1114;
+  transform: scale(1.1) rotate(5deg);
+}
+.drop-icon-wrap svg {
+  width: 24px;
+  height: 24px;
+  stroke: currentColor;
+  stroke-width: 2;
+  fill: none;
+}
+.dropzone-label {
+  font-size: 18px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.dropzone-sub {
+  color: var(--text-dim);
+  font-size: 13px;
+  font-family: var(--font-mono);
+}
+
+/* Deck Actions Row (New Interactive Report Modal Trigger) */
+.deck-action-strip {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.deck-quick-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--text-mute);
+  font-family: var(--font-mono);
+}
+.btn-deck-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: rgba(185, 224, 207, 0.1);
+  color: var(--mint);
+  border: 1px solid rgba(185, 224, 207, 0.3);
+  padding: 8px 18px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.btn-deck-trigger:hover {
+  background: var(--mint);
+  color: #0b1114;
+  box-shadow: 0 4px 16px var(--mint-glow);
+  transform: translateY(-1px);
+}
+
+/* Dynamic Live Report Preview Output */
+.live-inspection-results {
+  margin-top: 24px;
+  background: rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.inspection-badge-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.chip-score {
+  font-size: 11px;
+  font-weight: 800;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.chip-score.high {
+  background: rgba(244, 213, 195, 0.15);
+  color: var(--peach);
+  border: 1px solid rgba(244, 213, 195, 0.3);
+}
+.chip-score.zero {
+  background: rgba(185, 224, 207, 0.15);
+  color: var(--mint);
+  border: 1px solid rgba(185, 224, 207, 0.3);
+}
+.chain-pill-box {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.chain-node {
+  background: var(--bg-card-subtle);
+  border: 1px solid rgba(198, 222, 240, 0.3);
+  color: var(--sky);
+  font-size: 12px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 9999px;
+  transition: all 0.2s ease;
+}
+.chain-arrow {
+  color: var(--text-dim);
+  font-size: 14px;
+}
+
+/* Triad Cards */
+.triad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.triad-col {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 16px;
+}
+.triad-tag {
+  font-size: 11px;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.triad-tag.can { color: var(--mint); }
+.triad-tag.could { color: var(--peach); }
+.triad-tag.cant { color: var(--lav); }
+.triad-desc {
+  font-size: 13px;
+  color: var(--text-mute);
+  line-height: 1.5;
+}
+
+/* INTERACTIVE 6-STEP PIPELINE (Requested overhaul) */
+.pipeline-section {
+  padding: 90px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  background: rgba(18, 20, 26, 0.4);
+  position: relative;
+}
+.pipeline-instruction {
+  font-size: 13px;
+  color: var(--text-mute);
+  font-family: var(--font-mono);
+  margin-top: 8px;
+}
+.pipeline-steps-interactive {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-top: 40px;
+}
+
+/* Base Step Item */
+.pipe-step-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px 14px 18px;
+  text-align: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  overflow: visible;
+}
+.pipe-step-card:hover {
+  transform: translateY(-5px) scale(1.03);
+  z-index: 2;
+}
+
+/* Step Specific Accent Colors on Hover/Active */
+/* Step 01: Mint (#b9e0cf) */
+.pipe-step-card[data-step="1"].active,
+.pipe-step-card[data-step="1"]:hover {
+  border-color: var(--mint);
+  box-shadow: 0 12px 28px rgba(185, 224, 207, 0.22);
+  background: linear-gradient(180deg, #182220 0%, #12141a 100%);
+}
+.pipe-step-card[data-step="1"] .step-num { color: var(--mint); }
+.pipe-step-card[data-step="1"].active .step-num,
+.pipe-step-card[data-step="1"]:hover .step-num {
+  background: var(--mint);
+  color: #0b1114;
+}
+
+/* Step 02: Sky (#c6def0) */
+.pipe-step-card[data-step="2"].active,
+.pipe-step-card[data-step="2"]:hover {
+  border-color: var(--sky);
+  box-shadow: 0 12px 28px rgba(198, 222, 240, 0.22);
+  background: linear-gradient(180deg, #17212b 0%, #12141a 100%);
+}
+.pipe-step-card[data-step="2"] .step-num { color: var(--sky); }
+.pipe-step-card[data-step="2"].active .step-num,
+.pipe-step-card[data-step="2"]:hover .step-num {
+  background: var(--sky);
+  color: #0b1114;
+}
+
+/* Step 03: Lavender (#d1c9f2) */
+.pipe-step-card[data-step="3"].active,
+.pipe-step-card[data-step="3"]:hover {
+  border-color: var(--lav);
+  box-shadow: 0 12px 28px rgba(209, 201, 242, 0.22);
+  background: linear-gradient(180deg, #1e1b2e 0%, #12141a 100%);
+}
+.pipe-step-card[data-step="3"] .step-num { color: var(--lav); }
+.pipe-step-card[data-step="3"].active .step-num,
+.pipe-step-card[data-step="3"]:hover .step-num {
+  background: var(--lav);
+  color: #0b1114;
+}
+
+/* Step 04: Peach (#f4d5c3) */
+.pipe-step-card[data-step="4"].active,
+.pipe-step-card[data-step="4"]:hover {
+  border-color: var(--peach);
+  box-shadow: 0 12px 28px rgba(244, 213, 195, 0.22);
+  background: linear-gradient(180deg, #261d1b 0%, #12141a 100%);
+}
+.pipe-step-card[data-step="4"] .step-num { color: var(--peach); }
+.pipe-step-card[data-step="4"].active .step-num,
+.pipe-step-card[data-step="4"]:hover .step-num {
+  background: var(--peach);
+  color: #0b1114;
+}
+
+/* Step 05: Emerald (#a7f3d0) */
+.pipe-step-card[data-step="5"].active,
+.pipe-step-card[data-step="5"]:hover {
+  border-color: var(--emerald);
+  box-shadow: 0 12px 28px rgba(167, 243, 208, 0.22);
+  background: linear-gradient(180deg, #14241d 0%, #12141a 100%);
+}
+.pipe-step-card[data-step="5"] .step-num { color: var(--emerald); }
+.pipe-step-card[data-step="5"].active .step-num,
+.pipe-step-card[data-step="5"]:hover .step-num {
+  background: var(--emerald);
+  color: #0b1114;
+}
+
+/* Step 06: Cyan (#bae6fd) */
+.pipe-step-card[data-step="6"].active,
+.pipe-step-card[data-step="6"]:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 12px 28px rgba(186, 230, 253, 0.22);
+  background: linear-gradient(180deg, #15222b 0%, #12141a 100%);
+}
+.pipe-step-card[data-step="6"] .step-num { color: var(--cyan); }
+.pipe-step-card[data-step="6"].active .step-num,
+.pipe-step-card[data-step="6"]:hover .step-num {
+  background: var(--cyan);
+  color: #0b1114;
+}
+
+.step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  transition: all 0.25s ease;
+}
+.step-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+.step-desc {
+  font-size: 11px;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+
+/* Expanded Interactive Pipeline Tooltip Card */
+.pipeline-inspector-panel {
+  margin-top: 28px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px 30px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  box-shadow: 0 16px 40px rgba(0,0,0,0.4);
+  transition: all 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  position: relative;
+  overflow: hidden;
+}
+.pipeline-inspector-panel::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  background: var(--mint);
+  transition: background 0.3s ease;
+}
+.pipe-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+.pipe-detail-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  background: rgba(255,255,255,0.08);
+}
+.pipe-detail-title {
+  font-size: 18px;
+  font-weight: 800;
+}
+.pipe-detail-content {
+  font-size: 14px;
+  color: var(--text-mute);
+  max-width: 780px;
+  line-height: 1.6;
+}
+.pipe-detail-meta {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  background: rgba(0,0,0,0.3);
+  padding: 8px 16px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+/* Features Section */
+.features-section {
+  padding: 100px 0 60px;
+}
+.section-tag {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--mint);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 12px;
+  display: block;
+}
+.section-heading {
+  font-family: var(--font-display);
+  font-size: clamp(38px, 6vw, 64px);
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  text-transform: uppercase;
+  line-height: 1;
+  margin-bottom: 20px;
+}
+.feature-cards-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 24px;
+  margin-top: 48px;
+}
+.feat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 24px;
+  padding: 32px;
+  position: relative;
+  transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+.feat-card:hover {
+  transform: translateY(-4px);
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 20px 40px rgba(0,0,0,0.4);
+}
+.feat-icon-top {
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 20px;
+  font-size: 20px;
+  border: 1px solid var(--border);
+}
+.feat-icon-top.mint { background: rgba(185, 224, 207, 0.12); color: var(--mint); }
+.feat-icon-top.lav { background: rgba(209, 201, 242, 0.12); color: var(--lav); }
+.feat-icon-top.peach { background: rgba(244, 213, 195, 0.12); color: var(--peach); }
+.feat-title {
+  font-size: 20px;
+  font-weight: 700;
+  margin-bottom: 10px;
+}
+.feat-text {
+  font-size: 14px;
+  color: var(--text-mute);
+  line-height: 1.6;
+}
+.feat-badge-foot {
+  margin-top: 24px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  color: var(--text-dim);
+}
+
+/* Call to Action Banner */
+.cta-banner {
+  margin: 100px 0 60px;
+  background: linear-gradient(135deg, #171a22 0%, #101217 100%);
+  border: 1px solid var(--border);
+  border-radius: 32px;
+  padding: 60px 40px;
+  text-align: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 30px 80px rgba(0,0,0,0.5);
+}
+.cta-banner::after {
+  content: "";
+  position: absolute;
+  top: -50%;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 600px;
+  height: 300px;
+  background: radial-gradient(ellipse, rgba(185, 224, 207, 0.15), transparent 70%);
+  pointer-events: none;
+}
+.cta-title {
+  font-family: var(--font-display);
+  font-size: clamp(44px, 8vw, 84px);
+  font-weight: 900;
+  text-transform: uppercase;
+  line-height: 0.95;
+  margin-bottom: 20px;
+}
+.cta-sub {
+  color: var(--text-mute);
+  font-size: 17px;
+  max-width: 580px;
+  margin: 0 auto 32px;
+}
+
+/* Footer */
+footer {
+  padding: 40px 0 60px;
+  border-top: 1px solid var(--border);
+  color: var(--text-dim);
+  font-size: 13px;
+}
+.footer-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 20px;
+}
+
+/* Modal: Full Security Report Inspection */
+.report-modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(5, 6, 9, 0.85);
+  backdrop-filter: blur(12px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+.report-modal-backdrop.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.report-modal-card {
+  background: #11131a;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 24px;
+  max-width: 780px;
+  width: 100%;
+  max-height: 88vh;
+  overflow-y: auto;
+  box-shadow: 0 40px 100px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(185, 224, 207, 0.2);
+  transform: translateY(20px) scale(0.97);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
+  display: flex;
+  flex-direction: column;
+}
+.report-modal-backdrop.open .report-modal-card {
+  transform: translateY(0) scale(1);
+}
+.modal-head {
+  padding: 24px 28px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+.modal-body {
+  padding: 28px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+.modal-close-btn {
+  background: rgba(255,255,255,0.06);
+  border: 1px solid var(--border);
+  color: var(--text-mute);
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.modal-close-btn:hover {
+  background: rgba(255,255,255,0.15);
+  color: #fff;
+}
+.report-grid-meta {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 12px;
+  background: rgba(0,0,0,0.3);
+  padding: 16px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+.report-rule-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 12px 14px;
+  background: rgba(255,255,255,0.02);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+.rule-tag {
+  font-family: var(--font-mono);
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 4px;
+  background: rgba(185, 224, 207, 0.15);
+  color: var(--mint);
+  flex-shrink: 0;
+}
+
+/* Animations */
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+@keyframes popIn {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes floatAngled {
+  0% { transform: rotate(-3deg) translateY(0); }
+  100% { transform: rotate(-4deg) translateY(-4px); }
+}
+@keyframes glowPulse {
+  0% { text-shadow: 0 0 20px rgba(185, 224, 207, 0.2); }
+  100% { text-shadow: 0 0 40px rgba(185, 224, 207, 0.5); }
+}
+@keyframes ripple {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(2.6); opacity: 0; }
+}
+@keyframes radarScan {
+  0% { transform: translateY(-120px); opacity: 0; }
+  15% { opacity: 0.35; }
+  85% { opacity: 0.35; }
+  100% { transform: translateY(105vh); opacity: 0; }
+}
+
+/* Responsive */
+@media (max-width: 990px) {
+  .pipeline-steps-interactive { grid-template-columns: repeat(3, 1fr); }
+  .triad-grid { grid-template-columns: 1fr; }
+  .pipeline-inspector-panel { flex-direction: column; align-items: flex-start; }
+}
+@media (max-width: 640px) {
+  .pipeline-steps-interactive { grid-template-columns: repeat(2, 1fr); }
+  .hero-tag-angled { position: static; transform: none; display: inline-block; margin-top: 8px; }
+  .deck-header { flex-direction: column; align-items: flex-start; }
+  .navbar { border-radius: 20px; }
+  .nav-links { display: none; }
+  .report-grid-meta { grid-template-columns: 1fr; }
+}
+</style>
+</head>
+<body>
+<!-- Dynamic Ambient Glow & Animated Scanline -->
+<div class="ambient-glow" id="ambient-glow"></div>
+<div class="grid-bg"></div>
+<div class="scanline"></div>
+<div class="container">
+<!-- Sticky Pill Nav -->
+<header class="nav-wrap">
+<nav class="navbar">
+<a class="brand-link" href="#">
+<div class="brand-icon">
+<img alt="APK X-Ray Logo Mark" src="https://lh3.googleusercontent.com/aida-public/AB6AXuCqHIaf4ymoIdm3gc9pj0Vnnss3aG7xrUFU1z_ABBxbhIZt6IO6v0qGOgCWeKsVN7QJzixAlev4Wx1t0Mtx0TFVdoQ8OnrQYW3jiWM-T16Gf-hMnsXnEf8oxXz_ppYdpVTb9jRkI-YkXhLnVjqpBrgwm_GZ5Ex6NYQpuouzezcKYPHW4sibHtTOy2tcHVJDUotSc90DAJRkRwAPwaJiBK24rb0Lv2OseFCa9y66qnvdRcerFMrrHq4kD7H_e_Ccd6J0Wx4"/>
+</div>
+<span class="brand-name">
+          APK X-RAY
+          <span class="brand-tag">v0.1-mvp</span>
+</span>
+</a>
+<div class="nav-links">
+<a class="nav-link" href="#scanner">Scanner</a>
+<a class="nav-link" href="#pipeline">Deterministic Pipeline</a>
+<a class="nav-link" href="#features">Original Features</a>
+<a class="nav-link" href="#limits">Strict Boundaries</a>
+</div>
+<div style="display: flex; align-items: center; gap: 8px;">
+<a class="btn-primary" href="#scanner">
+<svg fill="none" height="16" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+          Upload APK
+        </a>
+</div>
+</nav>
+</header>
+<!-- Hero Section with Typewriter & Angled Tag -->
+<section class="hero-section">
+<div class="hero-badge">
+<span style="display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--mint);"></span>
+      Zero Execution Guarantee · Android Manifest Static Inspection
+    </div>
+<div class="hero-title-wrap">
+<h1 class="hero-title">
+        APK <span>X-RAY</span>
+</h1>
+<div class="hero-tag-angled">INSPECT BEFORE YOU INSTALL</div>
+</div>
+<!-- Interactive Typewriter Headline -->
+<div>
+<div class="typewriter-box">
+<span class="typewriter-prefix">$ detect_threats --target</span>
+<span class="typewriter-text" id="typewriter"></span><span class="cursor"></span>
+</div>
+</div>
+<p class="hero-sub">
+      Fake challans, deceptive gas bills, and predatory KYC updates spread through messaging apps. 
+      APK X-ray parses Android manifest definitions directly to provide plain-language, evidence-locked proof.
+    </p>
+<div class="hero-actions">
+<a class="btn-primary" href="#scanner" style="padding: 13px 28px; font-size: 15px;">
+<svg fill="none" height="18" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="18"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+        Try Interactive Scanner
+      </a>
+<button class="btn-ghost" onclick="openReportModal()" style="padding: 13px 24px; font-size: 15px;">
+<svg fill="none" height="18" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" width="18"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><polyline points="14 2 14 8 20 8"></polyline><line x1="16" x2="8" y1="13" y2="13"></line><line x1="16" x2="8" y1="17" y2="17"></line><polyline points="10 9 9 9 8 9"></polyline></svg>
+        Preview Security Report
+      </button>
+<a class="btn-ghost" href="https://github.com" style="padding: 13px 24px; font-size: 15px;" target="_blank">
+<svg fill="none" height="18" stroke="currentColor" stroke-width="2" viewbox="0 0 24 24" width="18"><path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22"></path></svg>
+        Open Source Code
+      </a>
+</div>
+<!-- Interactive Live Scanner Surface (Demo Showcase) -->
+<div class="scanner-deck" id="scanner">
+<div class="deck-header">
+<div class="deck-title-group">
+<div class="radar-dot"></div>
+<div>
+<div class="deck-title">Interactive Static Inspection Engine</div>
+<div style="font-size:12px; color:var(--text-dim); font-family:var(--font-mono);">
+              Status: Deterministic Sandbox Ready · Max 100MB
+            </div>
+</div>
+</div>
+<div class="deck-tabs">
+<button class="deck-tab active" id="tab-demo-rto" onclick="switchSample('rto')">Fake RTO Challan (9 pts)</button>
+<button class="deck-tab" id="tab-demo-calc" onclick="switchSample('calc')">Simple Calc (0 pts)</button>
+</div>
+</div>
+<!-- Drag & Drop Interactive Bay -->
+<div class="interactive-dropzone" id="drop-zone" onclick="triggerSimulatedUpload()">
+<input accept=".apk" id="apk-file-input" onchange="handleFileSelected(event)" style="display:none;" type="file"/>
+<div class="drop-icon-wrap">
+<svg viewbox="0 0 24 24"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="17 8 12 3 7 8"></polyline><line x1="12" x2="12" y1="3" y2="15"></line></svg>
+</div>
+<div class="dropzone-label" id="drop-title">Select or Drop an Android .apk File</div>
+<div class="dropzone-sub" id="drop-status">Uploads are size-checked, held temporarily in volatile memory, and permanently discarded.</div>
+</div>
+<!-- Action Strip with Pre-Download / Report View Modal Button -->
+<div class="deck-action-strip">
+<div class="deck-quick-info">
+<span>⚡ Local Parsing: AndroidManifest.xml</span>
+<span>·</span>
+<span>No Emulation / No Dynamic Execution</span>
+</div>
+<button class="btn-deck-trigger" onclick="openReportModal()">
+<svg fill="none" height="15" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="15"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+          View Full Security Report / Pre-Download
+        </button>
+</div>
+<!-- Realtime Evidence Output -->
+<div class="live-inspection-results" id="results-panel">
+<div class="inspection-badge-row">
+<div>
+<span style="font-family:var(--font-mono); font-size:11px; color:var(--text-dim);">EVALUATING ARTIFACT:</span>
+<h4 id="report-app-name" style="font-size:18px; font-weight:800; margin-top:2px;">RTO e-Challan Parivahan</h4>
+<span id="report-pkg-name" style="font-family:var(--font-mono); font-size:12px; color:var(--text-mute);">test.lookalike.challan · v1.0.4 · SHA256: 9f2c…a41e</span>
+</div>
+<div class="chip-score high" id="report-score-pill" style="padding: 8px 16px; font-size:13px;">
+            HIGH EXPOSURE · 9 PTS
+          </div>
+</div>
+<!-- Capability Chain Sequence -->
+<div>
+<div style="font-size:11px; font-family:var(--font-mono); text-transform:uppercase; color:var(--text-dim); margin-bottom:8px;">
+            Connected Capability Chain (Fires only when all links have manifest proof)
+          </div>
+<div class="chain-pill-box" id="chain-container">
+<span class="chain-node">R01 Receives &amp; Reads SMS</span>
+<span class="chain-arrow">→</span>
+<span class="chain-node">R03 Starts at Boot</span>
+<span class="chain-arrow">→</span>
+<span class="chain-node">INTERNET Permission</span>
+</div>
+</div>
+<!-- Can · Could · Can't Prove Triad -->
+<div class="triad-grid">
+<div class="triad-col">
+<div class="triad-tag can">
+<svg fill="none" height="12" stroke="currentColor" stroke-width="3" viewbox="0 0 24 24" width="12"><polyline points="20 6 9 17 4 12"></polyline></svg>
+              Can (Declared)
+            </div>
+<p class="triad-desc" id="triad-can">
+              Declared access to read and receive incoming SMS messages directly via system broadcast receivers.
+            </p>
+</div>
+<div class="triad-col">
+<div class="triad-tag could">
+<svg fill="none" height="12" stroke="currentColor" stroke-width="3" viewbox="0 0 24 24" width="12"><circle cx="12" cy="12" r="10"></circle><line x1="12" x2="12" y1="8" y2="12"></line><line x1="12" x2="12.01" y1="16" y2="16"></line></svg>
+              Could Enable
+            </div>
+<p class="triad-desc" id="triad-could">
+              Could intercept sensitive incoming verification SMS (like banking OTPs) before the user notices.
+            </p>
+</div>
+<div class="triad-col">
+<div class="triad-tag cant">
+<svg fill="none" height="12" stroke="currentColor" stroke-width="3" viewbox="0 0 24 24" width="12"><line x1="18" x2="6" y1="6" y2="18"></line><line x1="6" x2="18" y1="6" y2="18"></line></svg>
+              Can't Prove
+            </div>
+<p class="triad-desc" id="triad-cant">
+              Static analysis cannot prove whether the app actually reads them, or where it sends telemetry.
+            </p>
+</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Interactive 6-Step Pipeline Strip (Overhauled with dynamic pastel accents & contextual inspector) -->
+<section class="pipeline-section" id="pipeline">
+<div style="text-align: center; max-width: 650px; margin: 0 auto;">
+<span class="section-tag">Rigorous Verification Architecture</span>
+<h2 class="section-heading">How Every APK is Checked</h2>
+<p class="pipeline-instruction">Hover or tap any stage below to inspect the deterministic pipeline guarantees.</p>
+</div>
+<div class="pipeline-steps-interactive" id="pipeline-steps-list">
+<!-- Step 01: Mint -->
+<div class="pipe-step-card active" data-step="1" onclick="setPipeStep(1)" onmouseenter="setPipeStep(1)">
+<div class="step-num">01</div>
+<div class="step-title">Upload</div>
+<div class="step-desc">Validated size &amp; format; cached in volatile memory.</div>
+</div>
+<!-- Step 02: Sky -->
+<div class="pipe-step-card" data-step="2" onclick="setPipeStep(2)" onmouseenter="setPipeStep(2)">
+<div class="step-num">02</div>
+<div class="step-title">Extract</div>
+<div class="step-desc">Manifest strings, declared components &amp; receivers.</div>
+</div>
+<!-- Step 03: Lavender -->
+<div class="pipe-step-card" data-step="3" onclick="setPipeStep(3)" onmouseenter="setPipeStep(3)">
+<div class="step-num">03</div>
+<div class="step-title">Rules</div>
+<div class="step-desc">Deterministic rule IDs (R01–R09) evaluate manifest facts.</div>
+</div>
+<!-- Step 04: Peach -->
+<div class="pipe-step-card" data-step="4" onclick="setPipeStep(4)" onmouseenter="setPipeStep(4)">
+<div class="step-num">04</div>
+<div class="step-title">Score</div>
+<div class="step-desc">Documented point weights calculate Exposure Rating.</div>
+</div>
+<!-- Step 05: Emerald -->
+<div class="pipe-step-card" data-step="5" onclick="setPipeStep(5)" onmouseenter="setPipeStep(5)">
+<div class="step-num">05</div>
+<div class="step-title">Explain</div>
+<div class="step-desc">AI generates plain sentences; each tied to an evidence ID.</div>
+</div>
+<!-- Step 06: Cyan -->
+<div class="pipe-step-card" data-step="6" onclick="setPipeStep(6)" onmouseenter="setPipeStep(6)">
+<div class="step-num">06</div>
+<div class="step-title">Verify</div>
+<div class="step-desc">Claim ledger drops unsupported assertions; outputs report.</div>
+</div>
+</div>
+<!-- Active Step Detail Card -->
+<div class="pipeline-inspector-panel" id="pipeline-panel">
+<div>
+<div class="pipe-detail-header">
+<span class="pipe-detail-tag" id="panel-step-tag" style="color:var(--mint); border:1px solid rgba(185,224,207,0.3);">PHASE 01 · VOLATILE INGESTION</span>
+<span class="pipe-detail-title" id="panel-step-title">Secure Upload &amp; Header Sanity</span>
+</div>
+<p class="pipe-detail-content" id="panel-step-desc">
+          The uploaded file is strictly size-capped at 100MB, read into transient memory buffers, and verified for valid ZIP/AXML headers without executing any bytecode.
+        </p>
+</div>
+<div class="pipe-detail-meta" id="panel-step-meta">
+        Guarantee: Zero execution on disk
+      </div>
+</div>
+</section>
+<!-- Original Features (What makes APK X-Ray Distinct) -->
+<section class="features-section" id="features">
+<div style="text-align: center; max-width: 650px; margin: 0 auto;">
+<span class="section-tag">Evidence Over Verdicts</span>
+<h2 class="section-heading">Features Built for Public Trust</h2>
+<p style="color:var(--text-mute); font-size:16px;">
+        Traditional scanners provide an arbitrary green or red badge with no explanation. 
+        APK X-ray bridges technical Android manifests and user understanding.
+      </p>
+</div>
+<div class="feature-cards-grid">
+<!-- Feature 1 -->
+<div class="feat-card">
+<div>
+<div class="feat-icon-top mint">
+<svg fill="none" height="24" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path><path d="m9 12 2 2 4-4"></path></svg>
+</div>
+<h3 class="feat-title">Claim Ledger Checker</h3>
+<p class="feat-text">
+            Every sentence returned by the AI is strictly verified against extracted evidence IDs. 
+            Any statement asserting intent ("this app steals money") is automatically discarded, and the user is told exactly how many unbacked sentences were removed.
+          </p>
+</div>
+<div class="feat-badge-foot">
+<span style="color:var(--mint);">✓ Deterministic Safety</span> · Intent Claims Forbidden
+        </div>
+</div>
+<!-- Feature 2 -->
+<div class="feat-card">
+<div>
+<div class="feat-icon-top peach">
+<svg fill="none" height="24" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="24"><circle cx="12" cy="12" r="10"></circle><path d="m4.93 4.93 4.24 4.24"></path><path d="m14.83 9.17 4.24-4.24"></path><path d="m14.83 14.83 4.24 4.24"></path><path d="m9.17 14.83-4.24 4.24"></path></svg>
+</div>
+<h3 class="feat-title">Capability Chains</h3>
+<p class="feat-text">
+            Single permissions can be harmless; specific combinations reveal attack surfaces. 
+            Chains visually link individual rule hits (SMS Receive + Reboot Receiver + Internet) only when 100% of the links are provably present.
+          </p>
+</div>
+<div class="feat-badge-foot">
+<span style="color:var(--peach);">◆ Compound Attack Surfaces</span> · C1 &amp; C2 Chains
+        </div>
+</div>
+<!-- Feature 3 -->
+<div class="feat-card">
+<div>
+<div class="feat-icon-top lav">
+<svg fill="none" height="24" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="24"><rect height="18" rx="2" width="18" x="3" y="3"></rect><path d="M7 7h10"></path><path d="M7 12h10"></path><path d="M7 17h10"></path></svg>
+</div>
+<h3 class="feat-title">Can · Could · Can't Prove</h3>
+<p class="feat-text">
+            Every single security finding is broken down into a 3-part statement: what the manifest declares, 
+            what that allows in real-world conditions, and the exact boundary of what static analysis cannot verify.
+          </p>
+</div>
+<div class="feat-badge-foot">
+<span style="color:var(--lav);">★ Educational Security</span> · Transparent Limits
+        </div>
+</div>
+</div>
+</section>
+<!-- Strict Limits & Anti-Malware Disclaimer -->
+<section id="limits" style="padding: 40px 0 80px;">
+<div style="background: rgba(209, 201, 242, 0.05); border: 1px solid rgba(209, 201, 242, 0.2); border-radius: 24px; padding: 32px 36px; display: flex; align-items: flex-start; gap: 20px; flex-wrap: wrap;">
+<div style="width: 44px; height: 44px; border-radius: 12px; background: rgba(209, 201, 242, 0.15); color: var(--lav); display: flex; align-items: center; justify-content: center; flex: none;">
+<svg fill="none" height="22" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="22"><polygon points="12 2 2 22 22 22 12 2"></polygon><line x1="12" x2="12" y1="9" y2="13"></line><line x1="12" x2="12.01" y1="17" y2="17"></line></svg>
+</div>
+<div style="flex: 1; min-width: 260px;">
+<h4 style="font-size: 18px; font-weight: 700; color: #fff; margin-bottom: 6px;">
+          What Static Analysis Cannot Prove
+        </h4>
+<p style="font-size: 14px; color: var(--text-mute); line-height: 1.6;">
+          Permissions alone do not prove an app is malicious. APK X-ray never executes the app code in a sandbox, cannot observe network traffic during runtime, and cannot evaluate obfuscated or encrypted payloads. Our goal is to educate the user before they tap Install on their phone.
+        </p>
+</div>
+</div>
+</section>
+<!-- Big Call to Action -->
+<section class="cta-banner">
+<h2 class="cta-title">Inspect Before You Install</h2>
+<p class="cta-sub">
+      Don't let deceptive APKs access your personal data, messages, or overlay banking apps. Analyze files locally and reproducibly.
+    </p>
+<div style="display: flex; gap: 16px; justify-content: center; flex-wrap: wrap;">
+<a class="btn-primary" href="#scanner" style="padding: 14px 32px; font-size: 16px;">
+        Launch X-Ray Scanner
+      </a>
+<button class="btn-ghost" onclick="openReportModal()" style="padding: 14px 28px; font-size: 16px;">
+        Inspect Pre-Generated Audit
+      </button>
+<a class="btn-ghost" href="https://github.com" style="padding: 14px 28px; font-size: 16px;" target="_blank">
+        View Benchmark &amp; Rules (v0.1)
+      </a>
+</div>
+</section>
+<!-- Footer -->
+<footer>
+<div class="footer-row">
+<div style="display: flex; align-items: center; gap: 10px;">
+<span style="font-family: var(--font-display); font-size: 18px; font-weight: 800; color: #fff;">APK X-RAY</span>
+<span>·</span>
+<span>Evidence-First Android Static Security</span>
+</div>
+<div>
+<span>Ruleset v0.1-mvp · Strictly Static Analysis · Zero Data Retention</span>
+</div>
+</div>
+</footer>
+</div>
+<!-- Modal: Comprehensive Security Report & Artifact Export -->
+<div class="report-modal-backdrop" id="report-modal" onclick="handleModalBackdropClick(event)">
+<div class="report-modal-card">
+<div class="modal-head">
+<div>
+<div style="font-family:var(--font-mono); font-size:11px; color:var(--mint); text-transform:uppercase; letter-spacing:0.08em; margin-bottom:4px;">
+          Deterministic Static Audit · Manifest Evidence
+        </div>
+<h3 id="modal-title" style="font-size:22px; font-weight:800; color:#fff;">Security Report: RTO e-Challan Parivahan</h3>
+</div>
+<button class="modal-close-btn" onclick="closeReportModal()">✕</button>
+</div>
+<div class="modal-body">
+<!-- Top Meta Table -->
+<div class="report-grid-meta">
+<div><span style="color:var(--text-dim);">Package ID:</span> <span id="modal-pkg">test.lookalike.challan</span></div>
+<div><span style="color:var(--text-dim);">Version Code:</span> 104 (v1.0.4)</div>
+<div><span style="color:var(--text-dim);">SHA256 Fingerprint:</span> 9f2c7a1098de7f8...</div>
+<div><span style="color:var(--text-dim);">Exposure Verdict:</span> <strong style="color:var(--peach);">HIGH RISK (9 PTS)</strong></div>
+</div>
+<!-- Proven Intent Rules -->
+<div>
+<h4 style="font-size:14px; font-family:var(--font-mono); text-transform:uppercase; color:var(--text-mute); margin-bottom:12px;">
+          Fired Rules &amp; Verified Manifest Declarations (R01 - R09)
+        </h4>
+<div id="modal-rules-container" style="display:flex; flex-direction:column; gap:10px;">
+<div class="report-rule-row">
+<span class="rule-tag">R01 · 3 pts</span>
+<div>
+<strong style="color:#fff; font-size:14px;">android.permission.RECEIVE_SMS &amp; READ_SMS</strong>
+<p style="font-size:12px; color:var(--text-mute); margin-top:2px;">
+                Direct declaration to intercept cellular messages. BroadcastReceiver mapped in manifest component tree.
+              </p>
+</div>
+</div>
+<div class="report-rule-row">
+<span class="rule-tag" style="background:rgba(209,201,242,0.15); color:var(--lav);">R03 · 2 pts</span>
+<div>
+<strong style="color:#fff; font-size:14px;">RECEIVE_BOOT_COMPLETED receiver</strong>
+<p style="font-size:12px; color:var(--text-mute); margin-top:2px;">
+                Permits automatic background invocation upon device reboot without user manual launch.
+              </p>
+</div>
+</div>
+<div class="report-rule-row">
+<span class="rule-tag" style="background:rgba(244,213,195,0.15); color:var(--peach);">R07 · 4 pts</span>
+<div>
+<strong style="color:#fff; font-size:14px;">SYSTEM_ALERT_WINDOW (Overlay Permission)</strong>
+<p style="font-size:12px; color:var(--text-mute); margin-top:2px;">
+                App can draw arbitrary graphical surfaces over banking and system authentication screens.
+              </p>
+</div>
+</div>
+</div>
+</div>
+<!-- AI Claim Ledger Guarantee Box -->
+<div style="background:rgba(185,224,207,0.05); border:1px solid rgba(185,224,207,0.2); border-radius:14px; padding:16px;">
+<div style="font-size:13px; font-weight:700; color:var(--mint); margin-bottom:4px;">
+          Claim Ledger Filter Result: 100% Backed Statements
+        </div>
+<p style="font-size:12px; color:var(--text-mute); line-height:1.5;">
+          The plain-text summary was parsed sentence-by-sentence. Exactly 0 speculative assertions ("this app steals money") were admitted. Every included clause points to verified manifest nodes.
+        </p>
+</div>
+<!-- Modal Footer Action -->
+<div style="display:flex; justify-content:flex-end; gap:12px; margin-top:10px;">
+<button class="btn-ghost" onclick="closeReportModal()">Close Preview</button>
+<button class="btn-primary" onclick="simulateDownloadReport()">
+<svg fill="none" height="16" stroke="currentColor" stroke-width="2.5" viewbox="0 0 24 24" width="16"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" x2="12" y1="15" y2="3"></line></svg>
+          Download JSON / Markdown Report
+        </button>
+</div>
+</div>
+</div>
+</div>
+<script>
+// Ambient Mouse Glow Positioning
+document.addEventListener("mousemove", (e) => {
+  const x = (e.clientX / window.innerWidth) * 100;
+  const y = (e.clientY / window.innerHeight) * 100;
+  document.documentElement.style.setProperty("--mouse-x", `${x}%`);
+  document.documentElement.style.setProperty("--mouse-y", `${y}%`);
+});
+
+// Dynamic Typewriter Animation
+const phrases = [
+  '"fake_traffic_challan.apk"',
+  '"gas_bill_kyc_update.apk"',
+  '"parcel_delivery_duty.apk"',
+  '"govt_subsidy_scheme.apk"',
+  '"banking_support_patch.apk"'
+];
+
+let phraseIndex = 0;
+let charIndex = 0;
+let isDeleting = false;
+let typeSpeed = 90;
+const typewriterEl = document.getElementById("typewriter");
+
+function type() {
+  const currentPhrase = phrases[phraseIndex];
+  
+  if (isDeleting) {
+    typewriterEl.textContent = currentPhrase.substring(0, charIndex - 1);
+    charIndex--;
+    typeSpeed = 45;
+  } else {
+    typewriterEl.textContent = currentPhrase.substring(0, charIndex + 1);
+    charIndex++;
+    typeSpeed = 85;
+  }
+  
+  if (!isDeleting && charIndex === currentPhrase.length) {
+    typeSpeed = 1600;
+    isDeleting = true;
+  } else if (isDeleting && charIndex === 0) {
+    isDeleting = false;
+    phraseIndex = (phraseIndex + 1) % phrases.length;
+    typeSpeed = 400;
+  }
+  
+  setTimeout(type, typeSpeed);
+}
+document.addEventListener("DOMContentLoaded", type);
+
+// Sample Switcher in Scanner Deck
+const sampleData = {
+  rto: {
+    name: "RTO e-Challan Parivahan",
+    pkg: "test.lookalike.challan · v1.0.4 · SHA256: 9f2c…a41e",
+    scoreText: "HIGH EXPOSURE · 9 PTS",
+    scoreClass: "high",
+    chain: [
+      "R01 Receives & Reads SMS",
+      "R03 Starts at Boot",
+      "INTERNET Permission"
+    ],
+    can: "Declared access to read and receive incoming SMS messages directly via system broadcast receivers.",
+    could: "Could intercept sensitive incoming verification SMS (like banking OTPs) before the user notices.",
+    cant: "Static analysis cannot prove whether the app actually reads them, or where it sends telemetry."
+  },
+  calc: {
+    name: "Simple Calc Open",
+    pkg: "org.open.simplecalc · v3.2.0 · SHA256: 3c7a…881b",
+    scoreText: "MINIMAL EXPOSURE · 0 PTS",
+    scoreClass: "zero",
+    chain: [
+      "No sensitive capability chains declared in manifest"
+    ],
+    can: "Declares only basic hardware acceleration and standard touch input components.",
+    could: "Local arithmetic calculations and memory operations only.",
+    cant: "Zero background permissions requested. Verified safe baseline."
+  }
+};
+
+let currentSampleKey = 'rto';
+
+function switchSample(type) {
+  currentSampleKey = type;
+  document.getElementById("tab-demo-rto").classList.toggle("active", type === 'rto');
+  document.getElementById("tab-demo-calc").classList.toggle("active", type === 'calc');
+  
+  const d = sampleData[type];
+  document.getElementById("report-app-name").textContent = d.name;
+  document.getElementById("report-pkg-name").textContent = d.pkg;
+  
+  const scorePill = document.getElementById("report-score-pill");
+  scorePill.textContent = d.scoreText;
+  scorePill.className = "chip-score " + d.scoreClass;
+  
+  // Update Chain
+  const chainCont = document.getElementById("chain-container");
+  chainCont.innerHTML = "";
+  if (d.chain.length === 1) {
+    chainCont.innerHTML = `<span class="chain-node" style="color:var(--mint); border-color:rgba(185,224,207,0.3);">${d.chain[0]}</span>`;
+  } else {
+    d.chain.forEach((item, idx) => {
+      chainCont.innerHTML += `<span class="chain-node">${item}</span>`;
+      if (idx < d.chain.length - 1) {
+        chainCont.innerHTML += `<span class="chain-arrow">→</span>`;
+      }
+    });
+  }
+  
+  // Update Triad
+  document.getElementById("triad-can").textContent = d.can;
+  document.getElementById("triad-could").textContent = d.could;
+  document.getElementById("triad-cant").textContent = d.cant;
+
+  // Sync Modal Content
+  document.getElementById("modal-title").textContent = "Security Report: " + d.name;
+  document.getElementById("modal-pkg").textContent = d.pkg.split(' · ')[0];
+}
+
+// Interactive Pipeline Step Data & Dynamic Shifting
+const pipelineData = {
+  1: {
+    tag: "PHASE 01 · VOLATILE INGESTION",
+    title: "Upload & Memory Sandbox Ingest",
+    desc: "The APK is checked against strict size barriers (≤100MB), held strictly in volatile RAM, and decompressed purely as a ZIP archive. No code execution occurs on disk or in virtual sandboxes.",
+    meta: "Invariant: Discarded upon session end",
+    color: "var(--mint)",
+    borderColor: "rgba(185, 224, 207, 0.4)"
+  },
+  2: {
+    tag: "PHASE 02 · PARSER & EXTRACTION",
+    title: "Binary XML & Manifest Normalization",
+    desc: "Decodes binary AndroidManifest.xml into structured tokens. Pinpoints declared permissions, broadcast receivers, exported activities, content providers, and hardware intent-filters.",
+    meta: "Extracts: 100% of declared elements",
+    color: "var(--sky)",
+    borderColor: "rgba(198, 222, 240, 0.4)"
+  },
+  3: {
+    tag: "PHASE 03 · DETERMINISTIC RULES",
+    title: "Rule Engine Matrix (R01–R09)",
+    desc: "Runs strictly deterministic, unalterable rule sets against parsed facts. Matches high-risk flags like SMS interception, system reboot listener, dynamic dex loading, and mock location requests.",
+    meta: "Rule Scope: Non-statistical / Exact",
+    color: "var(--lav)",
+    borderColor: "rgba(209, 201, 242, 0.4)"
+  },
+  4: {
+    tag: "PHASE 04 · MATHEMATICAL SCORING",
+    title: "Exposure Point Calculation",
+    desc: "Computes total risk metric using published, weighted point deductions. Identifies whether compound rule occurrences form dangerous capability chains (e.g., Chain C1: SMS + Boot + Internet).",
+    meta: "Scale: 0 (Baseline) to 15+ (Critical)",
+    color: "var(--peach)",
+    borderColor: "rgba(244, 213, 195, 0.4)"
+  },
+  5: {
+    tag: "PHASE 05 · EVIDENCE-TIED EXPLANATION",
+    title: "Audited Natural Language Translation",
+    desc: "Generates clear, readable sentences explaining risks for non-technical users. Every generated clause must contain a mandatory citation pointing directly to an evidence ID in the manifest.",
+    meta: "Format: Can / Could / Can't Prove",
+    color: "var(--emerald)",
+    borderColor: "rgba(167, 243, 208, 0.4)"
+  },
+  6: {
+    tag: "PHASE 06 · CLAIM LEDGER VERIFICATION",
+    title: "Enforcement Ledger & Report Publication",
+    desc: "The final safety filter cross-references each sentence with the extracted evidence ledger. Any hallucinatory claims or unsupported declarations of malicious intent are instantly purged.",
+    meta: "Guarantee: Zero unbacked assertions",
+    color: "var(--cyan)",
+    borderColor: "rgba(186, 230, 253, 0.4)"
+  }
+};
+
+function setPipeStep(stepNumber) {
+  const allCards = document.querySelectorAll('.pipe-step-card');
+  allCards.forEach(c => c.classList.remove('active'));
+  
+  const current = document.querySelector(`.pipe-step-card[data-step="${stepNumber}"]`);
+  if (current) current.classList.add('active');
+
+  const info = pipelineData[stepNumber];
+  if (!info) return;
+
+  const panel = document.getElementById("pipeline-panel");
+  const tag = document.getElementById("panel-step-tag");
+  const title = document.getElementById("panel-step-title");
+  const desc = document.getElementById("panel-step-desc");
+  const meta = document.getElementById("panel-step-meta");
+
+  tag.textContent = info.tag;
+  tag.style.color = info.color;
+  tag.style.borderColor = info.borderColor;
+
+  title.textContent = info.title;
+  desc.textContent = info.desc;
+  meta.textContent = info.meta;
+
+  panel.style.setProperty("--accent-current", info.color);
+  panel.style.boxShadow = `0 16px 40px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.06)`;
+  panel.style.borderColor = info.borderColor;
+  
+  // Shift panel left indicator bar
+  const styleEl = document.getElementById("panel-dynamic-style") || document.createElement("style");
+  styleEl.id = "panel-dynamic-style";
+  styleEl.textContent = `.pipeline-inspector-panel::before { background: ${info.color} !important; }`;
+  document.head.appendChild(styleEl);
+}
+
+// Modal Interaction
+function openReportModal() {
+  document.getElementById("report-modal").classList.add("open");
+  document.body.style.overflow = "hidden";
+}
+
+function closeReportModal() {
+  document.getElementById("report-modal").classList.remove("open");
+  document.body.style.overflow = "";
+}
+
+function handleModalBackdropClick(event) {
+  if (event.target === document.getElementById("report-modal")) {
+    closeReportModal();
+  }
+}
+
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") closeReportModal();
+});
+
+function simulateDownloadReport() {
+  const btn = event.currentTarget;
+  const originalHtml = btn.innerHTML;
+  btn.innerHTML = `✓ Preparing Verified Report...`;
+  btn.style.background = "#fff";
+  btn.style.color = "#000";
+  setTimeout(() => {
+    btn.innerHTML = originalHtml;
+    btn.style.background = "";
+    btn.style.color = "";
+    alert("Deterministic Audit Report exported successfully (JSON + Verified Manifest Claims).");
+  }, 750);
+}
+
+// Drag & Drop Interactions
+function triggerSimulatedUpload() {
+  document.getElementById("apk-file-input").click();
+}
+
+function handleFileSelected(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  
+  const dropTitle = document.getElementById("drop-title");
+  const dropStatus = document.getElementById("drop-status");
+  
+  dropTitle.textContent = "Inspecting: " + file.name + "...";
+  dropStatus.textContent = "Parsing manifest headers, checking R01-R09 rules...";
+  
+  setTimeout(() => {
+    dropTitle.textContent = "File Parsed: " + file.name;
+    dropStatus.textContent = "100% Static Analysis Complete. Structured facts generated.";
+    switchSample('rto');
+  }, 1100);
+}
+
+const dropZone = document.getElementById("drop-zone");
+dropZone.addEventListener("dragover", (e) => {
+  e.preventDefault();
+  dropZone.classList.add("drag-active");
+});
+dropZone.addEventListener("dragleave", () => {
+  dropZone.classList.remove("drag-active");
+});
+dropZone.addEventListener("drop", (e) => {
+  e.preventDefault();
+  dropZone.classList.remove("drag-active");
+  if (e.dataTransfer.files.length) {
+    handleFileSelected({ target: { files: e.dataTransfer.files } });
+  }
+});
+</script>
+</body></html>

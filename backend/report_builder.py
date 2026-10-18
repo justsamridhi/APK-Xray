@@ -86,6 +86,7 @@ def build_report(
         # ------------------------------------------------------------------
         with _sentry_span("ai.lifecycle", "AI explanation workflow") as ai_span:
             ai_span.set_data("gen_ai.system", "google_gemini")
+            ai_span.set_data("gen_ai.agent.name", "apk_xray_explainer")
             ai_span.set_data("stage", "ai_explanation")
             ai_span.set_data("apk_xray.findings_count", findings_count)
             ai_span.set_data("apk_xray.risk_score", risk_score)
