@@ -29,7 +29,13 @@ content type. The default maximum upload size is 50 MiB.
 ## Configuration
 
 Configuration is read from the process environment by `backend/config.py`.
-The application does not automatically load a `.env` file.
+
+In **local development**, the `.env` file in the **project root** (not `backend/.env`)
+is automatically loaded via `python-dotenv` when `load_settings()` is first called.
+Production deployments should inject environment variables directly via container
+orchestration or hosting platform environment configuration.
+
+`.env` is listed in `.gitignore` — never commit it.
 
 | Variable | Default | Behavior |
 | --- | --- | --- |
@@ -38,6 +44,8 @@ The application does not automatically load a `.env` file.
 | `GEMMA4_API_KEY` | unset | Required by the Gemma adapter; never log or commit it. |
 | `APK_XRAY_GEMMA_TIMEOUT` | `90` | Positive timeout in seconds. The adapter retries once on timeout only. |
 | `APK_XRAY_GEMMA_DIAGNOSTICS` | unset | Set to `1` only for redacted live-verifier part diagnostics. |
+| `SENTRY_DSN` | unset | Sentry project DSN. When set, enables error tracking and performance tracing. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of requests to trace (0.0 to 1.0). Use `1.0` for local testing. |
 
 Copy [`.env.example`](.env.example) as a reference only; environment files
 containing credentials must remain local. If Gemma is not configured, reports
@@ -112,6 +120,118 @@ The parser in `parser/apk_parser.py` validates the ZIP container, extracts
 package metadata, permissions, and manifest components, and emits stable
 evidence IDs. Invalid, truncated, or unsupported inputs become explicit API
 errors.
+
+## Sentry tracing
+
+Optional stage-level performance and error tracing via the Sentry SDK.
+
+### Environment variables
+
+| Variable | Default | Behaviour |
+| --- | --- | --- |
+| `SENTRY_DSN` | unset | Enables Sentry when set to a non-empty DSN string. |
+| `SENTRY_TRACES_SAMPLE_RATE` | `0.0` | Fraction of transactions to sample (`0.0`–`1.0`). `0.0` disables performance traces; errors are still captured when a DSN is set. |
+
+When `SENTRY_DSN` is absent or empty the SDK is not initialised and the
+application behaves identically to a build without Sentry.
+
+### Local setup (without real credentials)
+
+Leave both variables unset or set `SENTRY_DSN=` in your environment.
+All tests run completely offline and never contact a Sentry endpoint.
+
+### Real analysis trace structure
+
+Each `POST /api/upload` request creates a Sentry transaction with the
+following child spans:
+
+```
+POST /api/upload                             ← FastAPI transaction
+  apk.parse       Parse APK manifest         ← Androguard extraction
+  apk.report      Build and validate report  ← scoring + AI agent lifecycle + schema
+    ai.lifecycle  AI explanation workflow    ← agent lifecycle & orchestration
+      gen_ai.generate  Gemma 4 generate      ← actual HTTP call to Gemini API
+      gen_ai.validate  Validate response     ← JSON parsing + token metrics
+      ai.validate_claims Validate claims     ← claim structure & citation validation
+    ai.fallback   AI explanation fallback    ← fallback path when AI is unconfigured
+  apk.persist     Persist report to SQLite   ← SQLite write
+```
+
+The `gen_ai.*` spans are created inside `backend/gemma.py` at the exact
+network/model call boundary, while `ai.lifecycle` and `ai.validate_claims` trace
+the agent decision flow and claim verification in `backend/report_builder.py`.
+
+### GenAI & Agent attributes recorded
+
+| Attribute | Source | Notes |
+| --- | --- | --- |
+| `gen_ai.system` | constant | `"google_gemini"` |
+| `gen_ai.agent.name` | constant | `"apk_xray_explainer"` (Sentry Agent module key) |
+| `gen_ai.operation.name` | constant | `"generate"` |
+| `gen_ai.request.model` | constant | `"gemma-4"` |
+| `gen_ai.usage.input_tokens` | `usageMetadata.promptTokenCount` | `None` when absent |
+| `gen_ai.usage.output_tokens` | `usageMetadata.candidatesTokenCount` | `None` when absent |
+| `gen_ai.usage.total_tokens` | `usageMetadata.totalTokenCount` | `None` when absent |
+| `apk_xray.retry_count` | runtime | `0` = no retry, `1` = one retry occurred |
+| `apk_xray.token_source` | runtime | `"response_metadata"` or `"unavailable"` |
+| `apk_xray.claim_count` | runtime | Total claims emitted by AI |
+| `apk_xray.kept_claim_count` | runtime | Validated claims citing known evidence |
+| `apk_xray.rejected_claim_count` | runtime | Claims rejected due to invalid structure/citations |
+| `apk_xray.validation_outcome` | runtime | `"ok"`, `"partial_rejection"`, `"full_rejection"` |
+| `apk_xray.findings_count` | runtime | Total deterministic findings evaluated |
+| `apk_xray.risk_score` | runtime | Deterministic risk score passed to agent |
+| `outcome` | runtime | `ok`, `timeout`, `rate_limit`, `provider_error`, `network_error`, `invalid_json`, `contract_violation`, `unconfigured` |
+
+Token counts are measured from the Gemini API `usageMetadata` field only.
+They are never estimated. Cost is not calculated.
+
+### Timeout and failure behaviour
+
+When Gemma times out, the `gen_ai.generate` span records `outcome=timeout`
+and `apk_xray.retry_count=1`. The report is returned with all deterministic
+findings intact; only `ai.status` changes to `"error"`. The API returns
+HTTP 200, not a 500.
+
+### Privacy controls
+
+The `scrub_event` function in `backend/sentry_setup.py` is registered as both
+`before_send` and `before_send_transaction`.  Before any event leaves the
+process it removes:
+
+- Request body, URL, query string, cookies, and environment block
+- Sensitive headers: `Authorization`, `x-goog-api-key`, `x-api-key`, `Cookie`,
+  and others (matched case-insensitively)
+- Exception `value` strings and all local variable snapshots (`frame.vars`)
+- All breadcrumbs
+- `extra` and `user` blocks
+- All SDK contexts except `trace`
+- Transaction names normalised (`/api/report/<id>` → `/api/report/{report_id}`)
+- Span `data` filtered to an explicit allowlist — only operational and GenAI
+  attributes survive; prompts, model responses, package names, evidence,
+  and paths are stripped unconditionally
+
+`send_default_pii=False` and `max_request_body_size="never"` are set at
+initialisation as a first-layer defence; `scrub_event` is a second,
+independent layer applied to every event.
+
+### Manual dashboard verification
+
+After configuring a real DSN and uploading a test APK:
+
+1. Confirm the transaction appears under the configured project.
+2. Verify the span tree: `apk.parse` → `apk.report` → `gen_ai.generate` →
+   `gen_ai.validate` → `apk.persist`.
+3. Check that `gen_ai.usage.input_tokens`, `gen_ai.usage.output_tokens`,
+   `apk_xray.retry_count`, and `apk_xray.token_source` appear on
+   `gen_ai.generate`.
+4. Verify that no request body, filename, path, API key, package name,
+   evidence array, or raw model response appears anywhere in the event.
+5. Confirm the transaction name is `POST /api/upload`.
+6. Reproduce a timeout with a short `APK_XRAY_GEMMA_TIMEOUT` and confirm
+   `outcome=timeout`, `apk_xray.retry_count=1` on `gen_ai.generate`.
+
+No automated test covers live Sentry dashboard output; all claims above
+require manual verification with real credentials.
 
 ## Limitations
 

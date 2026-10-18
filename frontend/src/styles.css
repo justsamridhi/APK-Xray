@@ -216,3 +216,756 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
 [data-theme='dark'] { --hero-background: #14161C; --hero-text: #F4F4F6; --hero-muted: #C4C6CF; }
 @media (min-width: 768px) and (max-width: 1100px) { .capability-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+/* ============================================
+   ANIMATION KEYFRAMES
+   ============================================ */
+
+/* Fade in upward movement */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Scanning pulse effect */
+@keyframes scanPulse {
+  0% {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  50% {
+    opacity: 0.8;
+    transform: scale(1);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.05);
+  }
+}
+
+/* Shimmer loading effect */
+@keyframes shimmer {
+  0% {
+    background-position: -200% 0;
+  }
+  100% {
+    background-position: 200% 0;
+  }
+}
+
+/* Number counter counting up */
+@keyframes countUp {
+  from {
+    opacity: 0;
+    transform: scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Slide in from side */
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateX(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+/* Fade in */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Scale in */
+@keyframes scaleIn {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* Pulse for attention */
+@keyframes pulse {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+/* Rotate animation for loading */
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ============================================
+   ANIMATION UTILITY CLASSES
+   ============================================ */
+
+/* Base animation class */
+.animate {
+  animation-fill-mode: both;
+  animation-timing-function: ease-out;
+}
+
+/* Duration utilities */
+.animate-duration-300 { animation-duration: 300ms; }
+.animate-duration-500 { animation-duration: 500ms; }
+.animate-duration-700 { animation-duration: 700ms; }
+.animate-duration-1000 { animation-duration: 1000ms; }
+
+/* Delay utilities for staggered animations */
+.animate-delay-100 { animation-delay: 100ms; }
+.animate-delay-150 { animation-delay: 150ms; }
+.animate-delay-200 { animation-delay: 200ms; }
+.animate-delay-300 { animation-delay: 300ms; }
+.animate-delay-400 { animation-delay: 400ms; }
+.animate-delay-500 { animation-delay: 500ms; }
+
+/* Animation type utilities */
+.animate-fade-in { animation-name: fadeIn; }
+.animate-fade-in-up { animation-name: fadeInUp; animation-duration: 0.6s; }
+.animate-scale-in { animation-name: scaleIn; }
+.animate-slide-in { animation-name: slideIn; }
+.animate-pulse { animation-name: pulse; animation-iteration-count: infinite; }
+
+/* Timing function overrides */
+.animate-ease-in { animation-timing-function: ease-in; }
+.animate-ease-in-out { animation-timing-function: ease-in-out; }
+.animate-linear { animation-timing-function: linear; }
+
+/* Staggered list container */
+.animate-stagger-children > * {
+  opacity: 0;
+}
+
+.animate-stagger-children > *.animate {
+  opacity: 1;
+}
+
+/* ============================================
+   LOADING SKELETON STYLES
+   ============================================ */
+
+/* Loading skeleton base */
+.skeleton {
+  background: linear-gradient(
+    90deg,
+    var(--surface-muted) 25%,
+    var(--surface) 50%,
+    var(--surface-muted) 75%
+  );
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+}
+
+/* Shimmer variants */
+.skeleton-text {
+  height: 1em;
+  border-radius: 4px;
+}
+
+.skeleton-title {
+  height: 1.5em;
+  width: 60%;
+  border-radius: 6px;
+}
+
+.skeleton-card {
+  height: 120px;
+  border-radius: 12px;
+}
+
+.skeleton-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+/* ============================================
+   GAUGE AND COUNTER ANIMATIONS
+   ============================================ */
+
+/* Gauge animation */
+.gauge-fill {
+  transition: stroke-dashoffset 1s ease-out;
+}
+
+/* Counter animation */
+.counter-animate {
+  display: inline-block;
+}
+/* ============================================
+   BACKGROUND OVERLAYS
+   ============================================ */
+
+/* Grid background - subtle lines */
+.grid-bg {
+  position: fixed;
+  inset: 0;
+  background-size: 40px 40px;
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Dark mode grid */
+[data-theme='dark'] .grid-bg {
+  background-image: 
+    linear-gradient(to right, rgba(255, 255, 255, 0.08) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(255, 255, 255, 0.08) 1px, transparent 1px);
+}
+
+/* ============================================
+   AMBIENT GLOW & SCANLINE ANIMATIONS
+   ============================================ */
+
+/* Dynamic Ambient Glow Background */
+.ambient-glow {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  background: 
+    radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, 20%), rgba(185, 224, 207, 0.08), transparent 70%),
+    radial-gradient(circle at 85% 35%, rgba(209, 201, 242, 0.06) 0%, transparent 55%),
+    radial-gradient(circle at 15% 75%, rgba(244, 213, 195, 0.05) 0%, transparent 50%),
+    radial-gradient(circle at 50% 90%, rgba(198, 222, 240, 0.04) 0%, transparent 60%);
+  transition: background 0.15s ease-out;
+}
+
+/* Dark mode ambient glow */
+[data-theme='dark'] .ambient-glow {
+  background: 
+    radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, 20%), rgba(185, 224, 207, 0.12), transparent 70%),
+    radial-gradient(circle at 85% 35%, rgba(209, 201, 242, 0.1) 0%, transparent 55%),
+    radial-gradient(circle at 15% 75%, rgba(244, 213, 195, 0.08) 0%, transparent 50%),
+    radial-gradient(circle at 50% 90%, rgba(198, 222, 240, 0.06) 0%, transparent 60%);
+}
+
+/* Faint Sweeping Radar Scanline */
+.scanline {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 120px;
+  background: linear-gradient(180deg, transparent 0%, rgba(185, 224, 207, 0.04) 50%, rgba(185, 224, 207, 0.1) 98%, #B9E0CF 100%);
+  opacity: 0.25;
+  pointer-events: none;
+  z-index: -1;
+  animation: radarScan 10s linear infinite;
+}
+
+/* Radar scan animation keyframe */
+@keyframes radarScan {
+  0% {
+    transform: translateY(-120px);
+    opacity: 0;
+  }
+  15% {
+    opacity: 0.35;
+  }
+  85% {
+    opacity: 0.35;
+  }
+  100% {
+    transform: translateY(calc(100vh + 120px));
+    opacity: 0;
+  }
+}
+
+/* ============================================
+   TYPEWRITER EFFECT STYLES
+   ============================================ */
+
+/* Typewriter container */
+.typewriter-box {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(23, 26, 34, 0.9);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 12px 24px;
+  margin: 0 auto 32px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 16px;
+  color: #D1C9F2;
+  box-shadow: inset 0 2px 8px rgba(0,0,0,0.4);
+}
+
+.typewriter-prefix {
+  color: #5c6270;
+  margin-right: 10px;
+}
+
+.typewriter-text {
+  color: #f5f6f8;
+  font-weight: 600;
+  position: relative;
+  white-space: pre;
+}
+
+.cursor {
+  display: inline-block;
+  width: 2px;
+  height: 1.2em;
+  background: #B9E0CF;
+  margin-left: 4px;
+  vertical-align: middle;
+  animation: blink 0.9s infinite;
+}
+
+@keyframes blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+
+/* ============================================
+   RICH COLOR SCHEME VARIABLES
+   ============================================ */
+
+/* Additional color variables for reference design */
+:root {
+  --mint: #B9E0CF;
+  --mint-glow: rgba(185, 224, 207, 0.25);
+  --lavender: #D1C9F2;
+  --lavender-glow: rgba(209, 201, 242, 0.25);
+  --peach: #F4D5C3;
+  --peach-glow: rgba(244, 213, 195, 0.25);
+  --sky: #C6DEF0;
+  --emerald: #A7F3D0;
+  --cyan: #BAE6FD;
+}
+
+[data-theme='dark'] {
+  --mint: #B9E0CF;
+  --mint-glow: rgba(185, 224, 207, 0.25);
+  --lavender: #D1C9F2;
+  --lavender-glow: rgba(209, 201, 242, 0.25);
+  --peach: #F4D5C3;
+  --peach-glow: rgba(244, 213, 195, 0.25);
+  --sky: #C6DEF0;
+  --emerald: #A7F3D0;
+  --cyan: #BAE6FD;
+}
+
+/* ============================================
+   INTERACTIVE PIPELINE CARDS WITH HOVER EFFECTS
+   ============================================ */
+
+/* Pipeline step card base */
+.pipe-step-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 18px;
+  padding: 22px 14px 18px;
+  text-align: center;
+  position: relative;
+  cursor: pointer;
+  transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
+  user-select: none;
+  overflow: visible;
+}
+
+.pipe-step-card:hover {
+  transform: translateY(-5px) scale(1.03);
+  z-index: 2;
+}
+
+/* Step specific accent colors on hover/active */
+/* Step 01: Mint (#B9E0CF) */
+.pipe-step-card[data-step="1"]:hover {
+  border-color: var(--mint);
+  box-shadow: 0 12px 28px rgba(185, 224, 207, 0.22);
+  background: linear-gradient(180deg, #182220 0%, var(--surface) 100%);
+}
+
+.pipe-step-card[data-step="1"] .step-num { 
+  color: var(--mint); 
+}
+
+.pipe-step-card[data-step="1"]:hover .step-num {
+  background: var(--mint);
+  color: #0b1114;
+}
+
+/* Step 02: Sky (#C6DEF0) */
+.pipe-step-card[data-step="2"]:hover {
+  border-color: var(--sky);
+  box-shadow: 0 12px 28px rgba(198, 222, 240, 0.22);
+  background: linear-gradient(180deg, #17212b 0%, var(--surface) 100%);
+}
+
+.pipe-step-card[data-step="2"] .step-num { 
+  color: var(--sky); 
+}
+
+.pipe-step-card[data-step="2"]:hover .step-num {
+  background: var(--sky);
+  color: #0b1114;
+}
+
+/* Step 03: Lavender (#D1C9F2) */
+.pipe-step-card[data-step="3"]:hover {
+  border-color: var(--lavender);
+  box-shadow: 0 12px 28px rgba(209, 201, 242, 0.22);
+  background: linear-gradient(180deg, #1e1b2e 0%, var(--surface) 100%);
+}
+
+.pipe-step-card[data-step="3"] .step-num { 
+  color: var(--lavender); 
+}
+
+.pipe-step-card[data-step="3"]:hover .step-num {
+  background: var(--lavender);
+  color: #0b1114;
+}
+
+/* Step 04: Peach (#F4D5C3) */
+.pipe-step-card[data-step="4"]:hover {
+  border-color: var(--peach);
+  box-shadow: 0 12px 28px rgba(244, 213, 195, 0.22);
+  background: linear-gradient(180deg, #261d1b 0%, var(--surface) 100%);
+}
+
+.pipe-step-card[data-step="4"] .step-num { 
+  color: var(--peach); 
+}
+
+.pipe-step-card[data-step="4"]:hover .step-num {
+  background: var(--peach);
+  color: #0b1114;
+}
+
+/* Step 05: Emerald (#A7F3D0) */
+.pipe-step-card[data-step="5"]:hover {
+  border-color: var(--emerald);
+  box-shadow: 0 12px 28px rgba(167, 243, 208, 0.22);
+  background: linear-gradient(180deg, #14241d 0%, var(--surface) 100%);
+}
+
+.pipe-step-card[data-step="5"] .step-num { 
+  color: var(--emerald); 
+}
+
+.pipe-step-card[data-step="5"]:hover .step-num {
+  background: var(--emerald);
+  color: #0b1114;
+}
+
+/* Step 06: Cyan (#BAE6FD) */
+.pipe-step-card[data-step="6"]:hover {
+  border-color: var(--cyan);
+  box-shadow: 0 12px 28px rgba(186, 230, 253, 0.22);
+  background: linear-gradient(180deg, #15222b 0%, var(--surface) 100%);
+}
+
+.pipe-step-card[data-step="6"] .step-num { 
+  color: var(--cyan); 
+}
+
+.pipe-step-card[data-step="6"]:hover .step-num {
+  background: var(--cyan);
+  color: #0b1114;
+}
+
+/* Step number badge */
+.step-num {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 12px;
+  transition: all 0.25s ease;
+}
+
+/* Step title and description */
+.step-title {
+  font-size: 15px;
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.step-desc {
+  font-size: 11px;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+/* Pipeline steps grid */
+.pipeline-steps-interactive {
+  display: grid;
+  grid-template-columns: repeat(6, 1fr);
+  gap: 12px;
+  margin-top: 40px;
+}
+
+@media (max-width: 990px) {
+  .pipeline-steps-interactive {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .pipeline-steps-interactive {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+
+
+
+
+/* Radial gradient backgrounds from ref2 */
+.bg-radial {
+  position: fixed;
+  width: 650px;
+  height: 650px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(244,213,195,0.06) 0%, rgba(209,201,242,0.03) 40%, transparent 70%);
+  top: -120px;
+  right: -100px;
+  filter: blur(80px);
+  pointer-events: none;
+  z-index: -2;
+}
+
+.bg-radial-2 {
+  position: fixed;
+  width: 500px;
+  height: 500px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(185,224,207,0.06) 0%, transparent 70%);
+  bottom: 0;
+  left: -80px;
+  filter: blur(90px);
+  pointer-events: none;
+  z-index: -2;
+}
+
+/* Report Hero Section from ref2 */
+.report-hero {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 28px;
+  padding: 32px 36px;
+  position: relative;
+  overflow: hidden;
+  margin-bottom: 24px;
+  box-shadow: 0 12px 36px rgba(0,0,0,0.4);
+}
+
+.report-hero::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 3px;
+  background: linear-gradient(90deg, #ff6b6b 0%, #f4d5c3 40%, #d1c9f2 70%, #b9e0cf 100%);
+}
+
+.hero-header-meta {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 28px;
+}
+
+.report-title-block {
+  flex: 1;
+  min-width: 300px;
+}
+
+.pre-flag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 5px 12px;
+  border-radius: 6px;
+  background: rgba(255,107,107,0.12);
+  border: 1px solid rgba(255,107,107,0.3);
+  color: #ff9696;
+  margin-bottom: 12px;
+}
+
+.pre-flag .dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #ff6b6b;
+  box-shadow: 0 0 8px #ff6b6b;
+  animation: pulse 2s infinite ease-in-out;
+}
+
+.app-name-row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 8px;
+}
+
+.app-icon {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #1a1d24, #252a34);
+  border: 1px solid rgba(255,255,255,0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-icon img {
+  width: 28px;
+  height: 28px;
+}
+
+.app-name {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 28px;
+  font-weight: 700;
+  color: #fff;
+}
+
+.package-name {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  color: var(--muted);
+  margin-bottom: 4px;
+}
+
+.version-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 6px;
+  background: rgba(255,255,255,0.06);
+  border: 1px solid rgba(255,255,255,0.1);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.report-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 16px;
+  padding: 20px;
+  background: rgba(0,0,0,0.2);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.meta-item {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.meta-label {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+
+.meta-value {
+  font-size: 14px;
+  font-weight: 600;
+  color: #fff;
+}
+
+.score-badge-hero {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 20px 24px;
+  background: rgba(0,0,0,0.3);
+  border-radius: 16px;
+  border: 1px solid var(--border);
+}
+
+.score-circle {
+  width: 72px;
+  height: 72px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  font-weight: 700;
+  position: relative;
+}
+
+.score-circle.low {
+  background: rgba(185,224,207,0.15);
+  border: 2px solid #b9e0cf;
+  color: #b9e0cf;
+}
+
+.score-circle.medium {
+  background: rgba(244,213,195,0.15);
+  border: 2px solid #f4d5c3;
+  color: #f4d5c3;
+}
+
+.score-circle.high {
+  background: rgba(255,107,107,0.15);
+  border: 2px solid #ff6b6b;
+  color: #ff6b6b;
+}
+
+.score-label-hero {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  opacity: 0.7;
+}

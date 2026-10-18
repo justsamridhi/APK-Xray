@@ -1,13 +1,26 @@
+
 import { useCallback, useEffect, useRef, useState, type ChangeEvent, type DragEvent, type KeyboardEvent as ReactKeyboardEvent } from 'react'
-import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, PrimaryButton, SecondaryButton, type IconName } from './components'
+
+import { Badge, Card, EmptyState, Icon, LoadingSpinner, NavigationLayout, PrimaryButton, SecondaryButton, type IconName } from './ui-components'
+
 import reportIcon from '../../assets/apk-xray-icons/report.svg'
+
 import { themeStorageKey, type Theme } from './theme'
+
 import { sampleReport, type SampleFinding } from './sampleReport'
+
 import { normalizeReport, type ReportData, type ReportFinding, type ReportLanguage } from './report'
-import { maxApkSize, upload, UploadError } from './api'
+
+import { maxApkSize, upload, getReport, UploadError } from './api'
+
 import './styles.css'
 
 const validPaths: string[] = ['/', '/analyze', '/report', '/report/sample', '/about']
+
+function isValidPath(path: string): boolean {
+  return validPaths.includes(path) || /^\/report\/[^/]+$/.test(path)
+}
+
 const apkMimeTypes = new Set(['application/vnd.android.package-archive', 'application/octet-stream', ''])
 
 type UploadState = 'idle' | 'ready' | 'uploading' | 'error'
@@ -82,11 +95,18 @@ function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
     const requestController = new AbortController()
     setController(requestController)
     const timeout = window.setTimeout(() => requestController.abort(new DOMException('Timed out', 'TimeoutError')), 90_000)
+
     try {
       const result = await upload(file, requestController.signal)
       if (requestIdRef.current !== requestId) return
+
+      const reportId = result.raw.reportId
+      if (typeof reportId !== 'string' || !reportId.trim()) {
+        throw new Error('The analysis returned no report ID.')
+      }
+
       onReport(result)
-      window.history.pushState({}, '', '/report')
+      window.history.pushState({}, '', `/report/${encodeURIComponent(reportId)}`)
       window.dispatchEvent(new PopStateEvent('popstate'))
     } catch (uploadError) {
       if (requestIdRef.current !== requestId) return
@@ -149,6 +169,7 @@ function findingTone(severity: ReportFinding['severity']) {
 function ReportEvidenceDrawer({ finding, onClose }: { finding: ReportFinding; onClose: () => void }) {
   const drawerRef = useRef<HTMLElement>(null)
   const previouslyFocusedRef = useRef<HTMLElement | null>(null)
+
   useEffect(() => {
     previouslyFocusedRef.current = document.activeElement instanceof HTMLElement ? document.activeElement : null
     const drawer = drawerRef.current
@@ -179,6 +200,7 @@ function ReportEvidenceDrawer({ finding, onClose }: { finding: ReportFinding; on
       previouslyFocusedRef.current?.focus()
     }
   }, [onClose])
+
   return <div className="evidence-backdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) onClose() }}>
     <aside ref={drawerRef} className="evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="evidence-heading">
       <button className="drawer-close" type="button" onClick={onClose} aria-label="Close evidence"><Icon name="close" /></button>
@@ -199,6 +221,7 @@ function ReportContent({ report }: { report: ReportData }) {
   const scoreTone = report.score.severity === 'high' || report.score.severity === 'very-high' ? 'warning' : report.score.severity === 'moderate' ? 'scan' : 'safe'
   const scoreLabel = report.score.severity.replace('-', ' ').toUpperCase()
   const evidenceForFinding = (finding: ReportFinding) => setEvidenceFinding(finding)
+
   const download = () => {
     const url = URL.createObjectURL(new Blob([JSON.stringify(report.raw, null, 2)], { type: 'application/json' }))
     const link = document.createElement('a')
@@ -209,6 +232,7 @@ function ReportContent({ report }: { report: ReportData }) {
     link.remove()
     URL.revokeObjectURL(url)
   }
+
   return <><div className="report-summary"><div><span className="eyebrow">ANALYSIS REPORT</span><h1 className="page-title">{report.app.name}</h1><p className="page-intro">{report.app.packageName} · version {report.app.version}</p>{report.ai && <p className="page-intro" role="status"><Badge tone={report.ai.status === 'verified' ? 'safe' : report.ai.status === 'error' ? 'warning' : 'schema'}>{report.ai.status === 'verified' ? 'AI VERIFIED' : report.ai.status === 'error' ? 'AI ERROR' : 'AI UNAVAILABLE'}</Badge> {report.ai.message}</p>}</div><div className="report-score"><span className="eyebrow">EXPOSURE SCORE</span><strong>{report.score.value}</strong><Badge tone={scoreTone}>{scoreLabel}</Badge><span className="score-label">{report.score.label}</span><button type="button" className="text-button" onClick={download}>Download report JSON</button></div></div>
     <section className="report-section" aria-labelledby="breakdown-heading"><div className="section-heading"><div><span className="eyebrow">DETERMINISTIC SCORING</span><h2 id="breakdown-heading">Score breakdown</h2></div></div><Card className="breakdown-card"><table className="breakdown-table"><caption className="visually-hidden">Rule contributions to the backend-provided exposure score</caption><thead><tr><th scope="col">Rule</th><th scope="col">Contribution</th></tr></thead><tbody>{report.findings.filter((finding) => finding.points !== null).map((finding) => <tr key={finding.ruleId}><th scope="row">{finding.ruleId}</th><td>{finding.points} points</td></tr>)}</tbody></table>{report.findings.every((finding) => finding.points === null) && <p className="page-intro">The backend did not provide rule contributions for this report.</p>}</Card></section>
     <section className="report-section" aria-labelledby="findings-heading"><div className="section-heading"><div><span className="eyebrow">FINDINGS</span><h2 id="findings-heading">{report.findings.length ? `${report.findings.length} results` : 'No findings'}</h2></div><div className="language-toggle" role="group" aria-label="Explanation language"><button type="button" className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}>English</button><button type="button" className={language === 'hi' ? 'selected' : ''} onClick={() => setLanguage('hi')}>हिन्दी</button></div></div>{report.findings.length ? <div className="finding-grid">{report.findings.map((finding) => <Card className="finding-card" key={finding.ruleId}><div className="finding-heading"><div><span className="eyebrow">{finding.ruleId}</span><h3>{finding.title}</h3></div><Badge tone={findingTone(finding.severity)}>{finding.severity.toUpperCase()}</Badge></div><p>{finding.summary}</p><p className="explanation">{finding.explanations[language] ?? finding.explanations.en ?? 'No explanation is available for this language.'}</p><div className="state-badges"><Badge tone={finding.claimStatus === 'verified' ? 'safe' : finding.claimStatus === 'removed' ? 'warning' : 'schema'}>{finding.claimStatus.toUpperCase()}</Badge></div><button className="text-button" type="button" onClick={() => evidenceForFinding(finding)}>View evidence</button></Card>)}</div> : <Card className="report-placeholder"><EmptyState title="No findings reported" description="The analysis completed without reportable findings." /></Card>}</section>
@@ -218,37 +242,97 @@ function ReportContent({ report }: { report: ReportData }) {
   </>
 }
 
-function ReportPage({ activeReport, onReport }: { activeReport: ReportData | null; onReport: (report: ReportData) => void }) {
+function ReportPage({
+  activeReport,
+  onReport,
+}: {
+  activeReport: ReportData | null
+  onReport: (report: ReportData) => void
+}) {
   const [status, setStatus] = useState<'loading' | 'empty' | 'ready' | 'error'>('loading')
   const [report, setReport] = useState<ReportData | null>(null)
+  const pathname = window.location.pathname
+  const encodedReportId = pathname.startsWith('/report/') ? pathname.slice('/report/'.length) : ''
+
+  let reportId: string | null = null
+  if (encodedReportId) {
+    try {
+      reportId = decodeURIComponent(encodedReportId)
+    } catch {
+      reportId = null
+    }
+  }
+
   useEffect(() => {
-    if (activeReport) {
+    let active = true
+
+    if (activeReport && (!reportId || activeReport.raw.reportId === reportId)) {
       setReport(activeReport)
       setStatus('ready')
-      return
+      return () => { active = false }
     }
-    let active = true
+
+    if (reportId) {
+      setReport(null)
+      setStatus('loading')
+
+      getReport(reportId)
+        .then((result) => {
+          if (!active) return
+          if (result.raw.reportId !== reportId) {
+            throw new Error('The returned report ID does not match the requested report.')
+          }
+          setReport(result)
+          setStatus('ready')
+          onReport(result)
+        })
+        .catch(() => {
+          if (!active) return
+          setReport(null)
+          setStatus('error')
+        })
+
+      return () => { active = false }
+    }
+
+    setReport(null)
+    setStatus('loading')
+
     fetch(import.meta.env.VITE_API_REPORT_URL ?? '/api/report')
       .then(async (response) => {
-        if (response.status === 404) return null
+        if (response.status === 404 || response.status === 400) return null
         if (!response.ok) throw new Error(`Report request failed with status ${response.status}.`)
         let payload: unknown
         try { payload = await response.json() } catch { throw new Error('The report response was not valid JSON.') }
         const result = normalizeReport(payload)
-        if (result) onReport(result)
+        if (!result) throw new Error('The report was malformed.')
         return result
       })
       .then((result) => {
         if (!active) return
-        if (!result) setStatus('empty')
-        else { setReport(result); setStatus('ready') }
+        if (!result) {
+          setStatus('empty')
+        } else {
+          setReport(result)
+          setStatus('ready')
+          onReport(result)
+        }
       })
-      .catch(() => { if (active) setStatus('error') })
+      .catch(() => {
+        if (!active) return
+        setReport(null)
+        setStatus('error')
+      })
+
     return () => { active = false }
-  }, [activeReport, onReport])
+  }, [reportId, activeReport, onReport])
+
   if (status === 'loading') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><LoadingSpinner label="Loading report…" /></Card></main>
-  if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The report could not be loaded or was malformed. Try the analysis again." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>
-  if (status === 'empty' || !report) return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState icon={reportIcon} title="No report yet" description="A report will appear here after a static analysis run. No security findings are available." action={<div className="empty-actions"><a className="button button-primary" href="/">Go to Analyze</a><a className="text-link" href="/report/sample">View sample report</a></div>} /></Card></main>
+
+  if (status === 'error') return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState title="Report unavailable" description="The saved report could not be loaded. It may not exist or the analysis service may be unavailable." action={<a className="button button-primary" href="/">Return to Analyze</a>} /></Card></main>
+
+  if (status === 'empty' || !report) return <main className="page-content"><span className="eyebrow">REPORT</span><h1 className="page-title">Analysis report</h1><Card className="report-placeholder"><EmptyState icon={reportIcon} title="No report yet" description="Upload an APK to generate a report, or explore the clearly labeled sample report." action={<div className="empty-actions"><a className="button button-primary" href="/">Go to Analyze</a><a className="text-link" href="/report/sample">View sample report</a></div>} /></Card></main>
+
   return <main className="page-content"><ReportContent report={report} /></main>
 }
 
@@ -320,10 +404,12 @@ function SampleReportPage() {
     sampleBanner: 'उदाहरण डेटा। यह वास्तविक विश्लेषण नहीं है।',
     severity: { low: 'कम', medium: 'मध्यम', high: 'अधिक' },
   }
+
   const closeEvidence = useCallback(() => {
     setEvidence(null)
     evidenceTriggerRef.current?.focus()
   }, [])
+
   useEffect(() => {
     if (!evidence) return
     const drawer = evidenceDrawerRef.current
@@ -356,6 +442,7 @@ function SampleReportPage() {
     document.addEventListener('keydown', onKeyDown)
     return () => document.removeEventListener('keydown', onKeyDown)
   }, [evidence, closeEvidence])
+
   const download = () => {
     const blob = new Blob([JSON.stringify(sampleReport, null, 2)], { type: 'application/json' })
     const url = URL.createObjectURL(blob)
@@ -367,6 +454,7 @@ function SampleReportPage() {
     link.remove()
     window.setTimeout(() => URL.revokeObjectURL(url), 0)
   }
+
   return <main className="page-content sample-report">
     <div className="sample-banner" role="alert"><Icon name="info" /> <strong>{copy.sampleBanner}</strong></div>
     <div className="sample-heading"><div><span className="eyebrow">{copy.reportType}</span><h1 className="page-title">Example Lantern</h1><p className="page-intro">{copy.intro}</p></div><button className="button button-secondary" type="button" onClick={download}>{copy.download}</button></div>
@@ -383,10 +471,20 @@ function AboutPage() {
 }
 
 export default function App() {
-  const [path, setPath] = useState(validPaths.includes(window.location.pathname) ? window.location.pathname : '/')
+  const [path, setPath] = useState(
+    isValidPath(window.location.pathname) ? window.location.pathname : '/',
+  )
   const [theme, setTheme] = useState<Theme>(getInitialTheme)
   const [report, setReport] = useState<ReportData | null>(null)
-  useEffect(() => { const onPopState = () => setPath(validPaths.includes(window.location.pathname) ? window.location.pathname : '/'); window.addEventListener('popstate', onPopState); return () => window.removeEventListener('popstate', onPopState) }, [])
+
+  useEffect(() => {
+    const onPopState = () => {
+      setPath(isValidPath(window.location.pathname) ? window.location.pathname : '/')
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
+  }, [])
+
   useEffect(() => {
     document.documentElement.dataset.theme = theme
     try {
@@ -395,5 +493,6 @@ export default function App() {
       // The app remains usable when persistence is unavailable.
     }
   }, [theme])
-  return <NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report' ? <ReportPage activeReport={report} onReport={setReport} /> : path === '/report/sample' ? <SampleReportPage /> : path === '/about' ? <AboutPage /> : <AnalyzePage onReport={setReport} />}<footer className="footer demo-note"><span>STATIC ANALYSIS · EVIDENCE REVIEW</span><span>APKS ARE NEVER EXECUTED</span></footer></div></NavigationLayout>
+
+  return <><div className='ambient-glow' /><div className='grid-bg' /><div className='scanline' /><div className='bg-radial' /><div className='bg-radial-2' /><NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report/sample' ? <SampleReportPage /> : path === '/report' || path.startsWith('/report/') ? <ReportPage activeReport={report} onReport={setReport} /> : path === '/about' ? <AboutPage /> : <AnalyzePage onReport={setReport} />}<footer className="footer demo-note"><span>STATIC ANALYSIS · EVIDENCE REVIEW</span><span>APKS ARE NEVER EXECUTED</span></footer></div></NavigationLayout></>
 }

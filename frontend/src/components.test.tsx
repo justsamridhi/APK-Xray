@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, expect, it, vi } from 'vitest'
-import { Badge, NavigationLayout, PrimaryButton } from './components'
+import { Badge, NavigationLayout, PrimaryButton } from './ui-components'
 
 describe('shared components', () => {
   it('renders accessible button states and badge tones', () => {
