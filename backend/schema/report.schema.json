@@ -1,3 +1,4 @@
+
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://apk-xray.dev/schema/report-1.0.json",
@@ -427,6 +428,7 @@
       "properties": {
         "status": {
           "enum": [
+            "available",
             "verified",
             "unavailable",
             "error"
