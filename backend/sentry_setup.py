@@ -82,6 +82,10 @@ _SPAN_DATA_ALLOWLIST: frozenset[str] = frozenset(
         "apk_xray.token_source",    # "response_metadata" | "unavailable"
         "apk_xray.claim_count",     # number of AI claims returned
         "apk_xray.rejected_claim_count",  # claims failing structure validation
+        "apk_xray.kept_claim_count",  # claims passing validation
+        "apk_xray.validation_outcome",  # "ok" | "partial_rejection" | "full_rejection"
+        "apk_xray.findings_count",  # number of deterministic findings
+        "apk_xray.risk_score",  # integer risk score
     }
 )
 

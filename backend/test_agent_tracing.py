@@ -66,7 +66,7 @@ class AgentTracingTests(unittest.TestCase):
             ai_span_mock = MagicMock()
             val_span_mock = MagicMock()
             fallback_mock = MagicMock()
-            
+
             mock_span_func.return_value.__enter__.side_effect = [
                 ai_span_mock, val_span_mock
             ]
@@ -85,7 +85,7 @@ class AgentTracingTests(unittest.TestCase):
 
         # Verify spans recorded success
         ai_span_mock.set_data.assert_any_call("outcome", "ok")
-        val_span_mock.set_data.assert_any_call("outcome", "ok")
+        val_span_mock.set_data.assert_any_call("apk_xray.validation_outcome", "ok")
 
         # Verify AI status reflects success
         self.assertEqual(report["ai"]["status"], "available")
@@ -126,6 +126,7 @@ class AgentTracingTests(unittest.TestCase):
         val_span_mock.set_data.assert_any_call("apk_xray.claim_count", 2)
         # Verify no rejections (all claims properly formatted)
         val_span_mock.set_data.assert_any_call("apk_xray.rejected_claim_count", 0)
+        val_span_mock.set_data.assert_any_call("apk_xray.kept_claim_count", 2)
 
     def test_ai_lifecycle_span_on_gemma_error(self) -> None:
         """Verify ai.lifecycle span records outcome on GemmaError."""
@@ -232,7 +233,7 @@ class AgentTracingTests(unittest.TestCase):
             # Force reload to trigger ImportError path
             import importlib
             import backend.report_builder as rb_module
-            
+
             # The module already loaded, so we test the noop path directly
             def gemma_callable(_facts):
                 return gemma_result
@@ -300,19 +301,246 @@ class AgentTracingTests(unittest.TestCase):
             def gemma_callable(_facts):
                 return gemma_result
 
-            # This should fail schema validation because first claim lacks id/status
-            with self.assertRaises(ValueError) as ctx:
-                build_report(self.facts, gemma_callable)
+            # With evidence-based validation, we reject bad claims but keep good ones
+            report = build_report(self.facts, gemma_callable)
 
-        # Verify the validation did record metrics before failing
+        # Verify the validation recorded metrics
         val_span_mock.set_data.assert_any_call("apk_xray.claim_count", 2)
         # Verify 1 was rejected (missing id/status)
         val_span_mock.set_data.assert_any_call("apk_xray.rejected_claim_count", 1)
+        val_span_mock.set_data.assert_any_call("apk_xray.kept_claim_count", 1)
         # Outcome should be partial_rejection
-        val_span_mock.set_data.assert_any_call("outcome", "partial_rejection")
+        val_span_mock.set_data.assert_any_call("apk_xray.validation_outcome", "partial_rejection")
 
-        # Verify error message mentions missing required properties
-        self.assertIn("schema validation", str(ctx.exception))
+        # Verify only the valid claim was kept
+        self.assertEqual(len(report["claims"]), 1)
+        self.assertEqual(report["claims"][0]["id"], "claim:gemma:2")
+
+    def test_missing_evidence_ids_rejected(self) -> None:
+        """Verify claims missing evidenceIds field are rejected."""
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Claim without evidence",
+                    "classification": "Can",
+                    "status": "verified",
+                    # Missing evidenceIds entirely
+                }
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span") as mock_span_func:
+            ai_span_mock = MagicMock()
+            val_span_mock = MagicMock()
+            mock_span_func.return_value.__enter__.side_effect = [ai_span_mock, val_span_mock]
+
+            report = build_report(self.facts, lambda _: gemma_result)
+
+        # Claim should be rejected (evidenceIds is required)
+        val_span_mock.set_data.assert_any_call("apk_xray.rejected_claim_count", 1)
+        val_span_mock.set_data.assert_any_call("apk_xray.kept_claim_count", 0)
+        val_span_mock.set_data.assert_any_call("apk_xray.validation_outcome", "full_rejection")
+
+        # Deterministic claims preserved
+        self.assertEqual(report["ai"]["status"], "available")
+
+    def test_empty_evidence_ids_list_rejected(self) -> None:
+        """Verify claims with empty evidenceIds list are rejected."""
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Claim with empty evidence",
+                    "classification": "Can",
+                    "evidenceIds": [],  # Empty list
+                    "status": "verified",
+                }
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span"):
+            report = build_report(self.facts, lambda _: gemma_result)
+
+        # Claim should be rejected (schema requires non-empty evidenceIds)
+        # AI claims are rejected, but deterministic claims might exist or be empty
+        self.assertEqual(report["ai"]["status"], "available")
+        # Verify the rejected claim is not in the report
+        claim_ids = [c.get("id") for c in report["claims"]]
+        self.assertNotIn("claim:gemma:1", claim_ids)
+
+    def test_unknown_evidence_ids_rejected(self) -> None:
+        """Verify claims citing unknown evidence IDs are rejected."""
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Claim citing unknown evidence",
+                    "classification": "Can",
+                    "evidenceIds": ["unknown:evidence:id"],  # Doesn't exist
+                    "status": "verified",
+                }
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span"):
+            report = build_report(self.facts, lambda _: gemma_result)
+
+        # Claim should be rejected (evidence doesn't exist)
+        # Verify the rejected claim is not in the report
+        claim_ids = [c.get("id") for c in report["claims"]]
+        self.assertNotIn("claim:gemma:1", claim_ids)
+
+    def test_malformed_evidence_records_handled(self) -> None:
+        """Verify malformed evidence in facts doesn't crash validation."""
+        facts_with_malformed = {
+            "app": self.facts["app"],
+            "evidence": [
+                {"id": "valid:evidence", "label": "Valid", "availability": "available"},
+                {"id": None, "label": "Invalid ID", "availability": "available"},  # Malformed ID
+                {"label": "Missing ID", "availability": "available"},  # Missing required field
+            ]
+        }
+
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Valid claim",
+                    "classification": "Can",
+                    "evidenceIds": ["valid:evidence"],
+                    "status": "verified",
+                }
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span"):
+            # Should not crash despite malformed evidence in facts
+            report = build_report(facts_with_malformed, lambda _: gemma_result)
+
+        # Valid claim should be kept
+        self.assertEqual(report["ai"]["status"], "available")
+
+    def test_partially_rejected_claims(self) -> None:
+        """Verify partial rejection when some claims are invalid."""
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Valid claim",
+                    "classification": "Can",
+                    "evidenceIds": ["manifest:package"],
+                    "status": "verified",
+                },
+                {
+                    "id": "claim:gemma:2",
+                    "text": "Invalid claim",
+                    "classification": "Can",
+                    "evidenceIds": ["unknown:evidence"],
+                    "status": "verified",
+                },
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span") as mock_span_func:
+            val_span_mock = MagicMock()
+            mock_span_func.return_value.__enter__.return_value = val_span_mock
+
+            report = build_report(self.facts, lambda _: gemma_result)
+
+        val_span_mock.set_data.assert_any_call("apk_xray.validation_outcome", "partial_rejection")
+        val_span_mock.set_data.assert_any_call("apk_xray.kept_claim_count", 1)
+        val_span_mock.set_data.assert_any_call("apk_xray.rejected_claim_count", 1)
+
+    def test_all_claims_rejected(self) -> None:
+        """Verify full rejection when all claims are invalid."""
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Invalid claim",
+                    "classification": "Can",
+                    "evidenceIds": ["unknown:1"],
+                    "status": "verified",
+                },
+                {
+                    "id": "claim:gemma:2",
+                    "text": "Another invalid claim",
+                    "classification": "Can",
+                    "evidenceIds": ["unknown:2"],
+                    "status": "verified",
+                },
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span") as mock_span_func:
+            val_span_mock = MagicMock()
+            mock_span_func.return_value.__enter__.return_value = val_span_mock
+
+            report = build_report(self.facts, lambda _: gemma_result)
+
+        val_span_mock.set_data.assert_any_call("apk_xray.validation_outcome", "full_rejection")
+        val_span_mock.set_data.assert_any_call("apk_xray.kept_claim_count", 0)
+        val_span_mock.set_data.assert_any_call("apk_xray.rejected_claim_count", 2)
+
+    def test_deterministic_findings_and_scoring_preserved(self) -> None:
+        """Verify deterministic findings and scoring preserved on AI failure."""
+        def gemma_callable(_facts):
+            raise GemmaError("Network failure", code="gemma_error")
+
+        with patch("backend.sentry_setup.sentry_span"):
+            report = build_report(self.facts, gemma_callable)
+
+        # Verify deterministic results preserved
+        self.assertIn("score", report)
+        self.assertIn("value", report["score"])
+        self.assertIn("findings", report)
+        self.assertIn("claims", report)
+
+        # Verify AI status reflects error
+        self.assertEqual(report["ai"]["status"], "error")
+
+    def test_privacy_safe_span_attributes(self) -> None:
+        """Verify span attributes are privacy-safe (no sensitive data)."""
+        gemma_result = {
+            "claims": [
+                {
+                    "id": "claim:gemma:1",
+                    "text": "Package is declared",
+                    "classification": "Can",
+                    "evidenceIds": ["manifest:package"],
+                    "status": "verified",
+                }
+            ],
+            "explanations": {"en": "English", "hi": "हिन्दी"},
+        }
+
+        with patch("backend.sentry_setup.sentry_span") as mock_span_func:
+            ai_span_mock = MagicMock()
+            mock_span_func.return_value.__enter__.return_value = ai_span_mock
+
+            report = build_report(self.facts, lambda _: gemma_result)
+
+        # Verify only safe attributes were set
+        calls = [str(call) for call in ai_span_mock.set_data.call_args_list]
+
+        # Should NOT contain sensitive data
+        for call in calls:
+            self.assertNotIn("packageName", call)
+            self.assertNotIn("snippet", call)
+            self.assertNotIn("apk_bytes", call)
+            self.assertNotIn("prompt", call)
+            self.assertNotIn("response", call)
+
+        # Should contain safe metrics
+        ai_span_mock.set_data.assert_any_call("apk_xray.findings_count", 0)
+        ai_span_mock.set_data.assert_any_call("apk_xray.risk_score", 0)
 
 
 if __name__ == "__main__":
