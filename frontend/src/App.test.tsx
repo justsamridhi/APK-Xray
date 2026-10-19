@@ -21,6 +21,8 @@ describe('application routes', () => {
     window.history.replaceState({}, '', '/')
     render(<App />)
     expect(screen.getByRole('heading', { name: /evidence-first android static analysis/i })).toBeInTheDocument()
+    expect(screen.getByLabelText(/example apk target/i)).toBeInTheDocument()
+    expect(screen.getByText('LIVE STATIC INSPECTION')).toBeInTheDocument()
     expect(screen.getAllByRole('link', { name: 'Analyze' })[0]).toHaveAttribute('href', '/')
   })
 

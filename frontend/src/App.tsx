@@ -51,6 +51,50 @@ function getInitialTheme(): Theme {
   return typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
 }
 
+const typewriterTargets = [
+  '"fake_traffic_challan.apk"',
+  '"gas_bill_kyc_update.apk"',
+  '"parcel_delivery_duty.apk"',
+  '"govt_subsidy_scheme.apk"',
+  '"banking_support_patch.apk"',
+]
+
+function TypewriterTarget() {
+  const [text, setText] = useState('')
+
+  useEffect(() => {
+    let phraseIndex = 0
+    let characterIndex = 0
+    let deleting = false
+    let timer: number | undefined
+
+    const tick = () => {
+      const phrase = typewriterTargets[phraseIndex]
+      characterIndex += deleting ? -1 : 1
+      setText(phrase.slice(0, characterIndex))
+
+      if (!deleting && characterIndex === phrase.length) {
+        deleting = true
+        timer = window.setTimeout(tick, 1600)
+      } else if (deleting && characterIndex === 0) {
+        deleting = false
+        phraseIndex = (phraseIndex + 1) % typewriterTargets.length
+        timer = window.setTimeout(tick, 400)
+      } else {
+        timer = window.setTimeout(tick, deleting ? 45 : 85)
+      }
+    }
+
+    tick()
+    return () => { if (timer !== undefined) window.clearTimeout(timer) }
+  }, [])
+
+  return <div className="typewriter-box" aria-label={`Example APK target: ${text || typewriterTargets[0]}`}>
+    <span className="typewriter-prefix">$ detect_threats --target</span>
+    <span className="typewriter-text" aria-hidden="true">{text}</span><span className="cursor" aria-hidden="true" />
+  </div>
+}
+
 function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [file, setFile] = useState<File | null>(null)
@@ -123,10 +167,11 @@ function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
 
   return <main className="page-content">
     <section className="hero-panel">
-      <div><Badge tone="safe">INSPECT BEFORE YOU INSTALL</Badge><h1>Evidence-first Android static analysis.</h1><p>Understand what an APK declares before it reaches a device. APKs will be inspected without being run or installed.</p></div>
+      <div><Badge tone="safe">INSPECT BEFORE YOU INSTALL</Badge><h1>Evidence-first Android static analysis.</h1><TypewriterTarget /><p>Understand what an APK declares before it reaches a device. APKs will be inspected without being run or installed.</p></div>
       <Card><span className="eyebrow"><Icon name="shieldCheck" /> EVIDENCE REVIEW</span><h2>What does this APK declare?</h2><p className="page-intro">Review permissions and exported components before installing. Findings are deterministic and linked to manifest evidence.</p></Card>
     </section>
-    <Card className="upload-placeholder">
+    <Card className="upload-placeholder scanner-deck">
+      <div className="scanner-deck-header"><span className="radar-dot" aria-hidden="true" /><span className="eyebrow">LIVE STATIC INSPECTION</span><span className="scanner-deck-status">READY</span></div>
       <span className="eyebrow">INPUT BAY</span>
       <h2>Analyze an APK</h2>
       <p className="page-intro">Select an APK to send it for static analysis. The file is uploaded only; it is never executed or installed.</p>
@@ -493,6 +538,15 @@ export default function App() {
       // The app remains usable when persistence is unavailable.
     }
   }, [theme])
+
+  useEffect(() => {
+    const updateAmbientGlow = (event: MouseEvent) => {
+      document.documentElement.style.setProperty('--mouse-x', `${(event.clientX / window.innerWidth) * 100}%`)
+      document.documentElement.style.setProperty('--mouse-y', `${(event.clientY / window.innerHeight) * 100}%`)
+    }
+    window.addEventListener('mousemove', updateAmbientGlow, { passive: true })
+    return () => window.removeEventListener('mousemove', updateAmbientGlow)
+  }, [])
 
   return <><div className='ambient-glow' /><div className='grid-bg' /><div className='scanline' /><div className='bg-radial' /><div className='bg-radial-2' /><NavigationLayout currentPath={path} theme={theme} onThemeToggle={() => setTheme((current) => current === 'light' ? 'dark' : 'light')}><div className="shell">{path === '/report/sample' ? <SampleReportPage /> : path === '/report' || path.startsWith('/report/') ? <ReportPage activeReport={report} onReport={setReport} /> : path === '/about' ? <AboutPage /> : <AnalyzePage onReport={setReport} />}<footer className="footer demo-note"><span>STATIC ANALYSIS · EVIDENCE REVIEW</span><span>APKS ARE NEVER EXECUTED</span></footer></div></NavigationLayout></>
 }

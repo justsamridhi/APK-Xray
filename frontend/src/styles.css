@@ -61,7 +61,7 @@ html { overflow-x: hidden; }
 body { margin: 0; color: var(--text); background: var(--background); transition: background-color .15s, color .15s; }
 button, input { font: inherit; }
 button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 3px solid var(--text); outline-offset: 3px; }
-.application-layout { display: grid; grid-template-columns: 15rem minmax(0, 1fr); min-height: 100vh; }
+.application-layout { position: relative; z-index: 1; display: grid; grid-template-columns: 15rem minmax(0, 1fr); min-height: 100vh; }
 .sidebar { display: flex; flex-direction: column; gap: 2rem; padding: 1.5rem 1rem; background: var(--surface); border-right: 1px solid var(--border); }
 .sidebar-brand, .mobile-brand { display: inline-flex; align-items: center; gap: .65rem; color: var(--text); text-decoration: none; white-space: nowrap; }
 .sidebar-brand .brand-logo, .mobile-brand .brand-logo { width: 36px; height: 36px; }
@@ -434,7 +434,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
     linear-gradient(to right, rgba(255, 255, 255, 0.05) 1px, transparent 1px),
     linear-gradient(to bottom, rgba(255, 255, 255, 0.05) 1px, transparent 1px);
   pointer-events: none;
-  z-index: -1;
+  z-index: 0;
 }
 
 /* Dark mode grid */
@@ -453,7 +453,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
   position: fixed;
   inset: 0;
   pointer-events: none;
-  z-index: -1;
+  z-index: 0;
   background: 
     radial-gradient(800px circle at var(--mouse-x, 50%) var(--mouse-y, 20%), rgba(185, 224, 207, 0.08), transparent 70%),
     radial-gradient(circle at 85% 35%, rgba(209, 201, 242, 0.06) 0%, transparent 55%),
@@ -481,7 +481,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
   background: linear-gradient(180deg, transparent 0%, rgba(185, 224, 207, 0.04) 50%, rgba(185, 224, 207, 0.1) 98%, #B9E0CF 100%);
   opacity: 0.25;
   pointer-events: none;
-  z-index: -1;
+  z-index: 0;
   animation: radarScan 10s linear infinite;
 }
 
@@ -516,7 +516,9 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
   border: 1px solid var(--border);
   border-radius: 14px;
   padding: 12px 24px;
-  margin: 0 auto 32px;
+  width: fit-content;
+  max-width: 100%;
+  margin: 1.25rem 0;
   font-family: 'JetBrains Mono', monospace;
   font-size: 16px;
   color: #D1C9F2;
@@ -532,6 +534,8 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
   color: #f5f6f8;
   font-weight: 600;
   position: relative;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: pre;
 }
 
@@ -548,6 +552,60 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
 @keyframes blink {
   0%, 100% { opacity: 1; }
   50% { opacity: 0; }
+}
+
+/* Scanner shell used by the real upload flow, not only the reference mock-up. */
+.scanner-deck {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanner-deck::before {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  content: '';
+  pointer-events: none;
+  background: linear-gradient(115deg, transparent 20%, rgba(185, 224, 207, .1) 50%, transparent 80%);
+  transform: translateX(-100%);
+  animation: scannerSweep 4s ease-in-out infinite;
+}
+
+.scanner-deck > * { position: relative; z-index: 1; }
+
+.scanner-deck-header {
+  display: flex;
+  align-items: center;
+  gap: .5rem;
+  width: 100%;
+  padding-bottom: .75rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.scanner-deck-status {
+  margin-left: auto;
+  color: var(--mint-ink);
+  font: 600 10px/14px 'JetBrains Mono', monospace;
+  letter-spacing: .08em;
+}
+
+.radar-dot {
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: var(--mint-ink);
+  box-shadow: 0 0 0 rgba(185, 224, 207, .7);
+  animation: radarPulse 1.8s ease-out infinite;
+}
+
+@keyframes scannerSweep {
+  0%, 25% { transform: translateX(-100%); }
+  60%, 100% { transform: translateX(100%); }
+}
+
+@keyframes radarPulse {
+  0% { box-shadow: 0 0 0 0 rgba(185, 224, 207, .7); }
+  70%, 100% { box-shadow: 0 0 0 .6rem rgba(185, 224, 207, 0); }
 }
 
 /* ============================================
@@ -763,7 +821,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
   right: -100px;
   filter: blur(80px);
   pointer-events: none;
-  z-index: -2;
+  z-index: 0;
 }
 
 .bg-radial-2 {
@@ -776,7 +834,7 @@ button:focus-visible, a:focus-visible, [role="button"]:focus-visible { outline: 
   left: -80px;
   filter: blur(90px);
   pointer-events: none;
-  z-index: -2;
+  z-index: 0;
 }
 
 /* Report Hero Section from ref2 */
