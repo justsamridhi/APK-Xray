@@ -11,6 +11,7 @@ import { sampleReport, type SampleFinding } from './sampleReport'
 
 import { normalizeReport, type ReportData, type ReportFinding, type ReportLanguage } from './report'
 
+import { API_BASE } from './config'
 import { maxApkSize, upload, getReport, UploadError } from './api'
 
 import './styles.css'
@@ -194,7 +195,7 @@ function AnalyzePage({ onReport }: { onReport: (report: ReportData) => void }) {
       </div>
       {error && <p className="upload-error" role="alert"><Icon name="alert" />{error}</p>}
       {file && !error && <p className="upload-success" role="status"><Icon name="shieldCheck" />File validated and ready for static analysis.</p>}
-      {state === 'uploading' && <div ref={resultRef} tabIndex={-1}><LoadingSpinner label="Analyzing APK with the static backend…" /></div>}
+      {state === 'uploading' && <div ref={resultRef} tabIndex={-1}><LoadingSpinner label="Analyzing APK with the static backend… (free-tier servers may take 30-60s to wake up)" /></div>}
       <div className="upload-actions">
         <SecondaryButton type="button" onClick={() => fileInputRef.current?.click()} disabled={state === 'uploading'}>Choose APK</SecondaryButton>
         <PrimaryButton type="button" onClick={uploadFile} disabled={!file || state === 'uploading'}>{state === 'uploading' ? 'Analyzing…' : 'Start analysis'}</PrimaryButton>
@@ -343,12 +344,21 @@ function ReportPage({
     setReport(null)
     setStatus('loading')
 
-    fetch(import.meta.env.VITE_API_REPORT_URL ?? '/api/report')
+    fetch(import.meta.env.VITE_API_REPORT_URL ?? `${API_BASE}/api/report`)
       .then(async (response) => {
         if (response.status === 404 || response.status === 400) return null
-        if (!response.ok) throw new Error(`Report request failed with status ${response.status}.`)
+        if (!response.ok) {
+          const errorText = await response.text().catch(() => '')
+          console.error(`[API Report Error] HTTP ${response.status}:`, errorText)
+          throw new Error(`Report request failed with status ${response.status}.`)
+        }
         let payload: unknown
-        try { payload = await response.json() } catch { throw new Error('The report response was not valid JSON.') }
+        try {
+          payload = await response.json()
+        } catch {
+          console.error(`[API Report Error] HTTP ${response.status}: Failed to parse JSON response.`)
+          throw new Error('The report response was not valid JSON.')
+        }
         const result = normalizeReport(payload)
         if (!result) throw new Error('The report was malformed.')
         return result
@@ -363,8 +373,9 @@ function ReportPage({
           onReport(result)
         }
       })
-      .catch(() => {
+      .catch((err) => {
         if (!active) return
+        console.error('[API Report Error]:', err)
         setReport(null)
         setStatus('error')
       })

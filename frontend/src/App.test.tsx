@@ -1,6 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { API_BASE } from './config'
 import App from './App'
 
 const reportContract = {
@@ -57,7 +58,7 @@ describe('application routes', () => {
     expect(screen.getByRole('button', { name: 'Start analysis' })).toBeEnabled()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
     expect(await screen.findByRole('heading', { name: 'Uploaded App' })).toBeInTheDocument()
-    expect(fetch).toHaveBeenCalledWith('/api/upload', expect.objectContaining({ method: 'POST' }))
+    expect(fetch).toHaveBeenCalledWith(`${API_BASE}/api/upload`, expect.objectContaining({ method: 'POST' }))
   })
 
   it('renders the report placeholder', async () => {

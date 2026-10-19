@@ -1,3 +1,8 @@
 node_modules/
 dist/
 *.tsbuildinfo
+
+# Local environment variables
+.env
+.env.*
+!.env.example

@@ -1,9 +1,10 @@
 
+import { API_BASE } from './config'
 import { normalizeReport, type ReportData } from './report'
 
 export const maxApkSize = 50 * 1024 * 1024
-const defaultUploadEndpoint = '/api/upload'
-const defaultReportEndpoint = '/api/report'
+const defaultUploadEndpoint = `${API_BASE}/api/upload`
+const defaultReportEndpoint = `${API_BASE}/api/report`
 
 export type UploadErrorCode =
   | 'cancelled'
@@ -22,7 +23,7 @@ export class UploadError extends Error {
   }
 }
 
-function errorMessage(status: number, payload: unknown): string {
+function errorMessage(status: number, payload: unknown, rawText?: string): string {
   if (payload && typeof payload === 'object') {
     const error = (payload as { error?: { message?: unknown } }).error
 
@@ -31,28 +32,37 @@ function errorMessage(status: number, payload: unknown): string {
     }
   }
 
+  if (rawText && rawText.trim()) {
+    return `The analysis service returned HTTP ${status}: ${rawText.trim().slice(0, 150)}`
+  }
+
   return `The analysis service returned HTTP ${status}.`
 }
 
 async function parseReportResponse(response: Response): Promise<ReportData> {
   let payload: unknown
+  let rawText = ''
 
   try {
-    payload = await response.json()
+    rawText = await response.text()
+    payload = JSON.parse(rawText)
   } catch {
+    console.error(`[API Error] HTTP ${response.status}: Failed to parse JSON response. Response text:`, rawText)
     throw new UploadError(
       'invalid_response',
-      'The analysis service returned invalid JSON.',
+      `The analysis service returned HTTP ${response.status} with non-JSON response.`,
     )
   }
 
   if (!response.ok) {
-    throw new UploadError('http', errorMessage(response.status, payload))
+    console.error(`[API Error] HTTP ${response.status}:`, payload || rawText)
+    throw new UploadError('http', errorMessage(response.status, payload, rawText))
   }
 
   const report = normalizeReport(payload)
 
   if (!report) {
+    console.error('[API Error] The analysis service returned an invalid report schema:', payload)
     throw new UploadError(
       'invalid_response',
       'The analysis service returned an invalid report.',
@@ -73,6 +83,7 @@ export async function upload(
   let response: Response
 
   try {
+    // Note: Do NOT set Content-Type header so the browser automatically sets multipart/form-data boundary
     response = await fetch(endpoint, {
       method: 'POST',
       body,
@@ -83,9 +94,10 @@ export async function upload(
       signal.reason instanceof DOMException &&
       signal.reason.name === 'TimeoutError'
     ) {
+      console.error('[API upload timeout]: Request timed out.')
       throw new UploadError(
         'timeout',
-        'The analysis request timed out. Try again.',
+        'The analysis request timed out. Free-tier backend instances on Render can take 30-60 seconds to wake up on cold start. Please try again.',
       )
     }
 
@@ -94,12 +106,14 @@ export async function upload(
     }
 
     if (error instanceof DOMException && error.name === 'TimeoutError') {
+      console.error('[API upload timeout]: Request timed out.')
       throw new UploadError(
         'timeout',
-        'The analysis request timed out. Try again.',
+        'The analysis request timed out. Free-tier backend instances on Render can take 30-60 seconds to wake up on cold start. Please try again.',
       )
     }
 
+    console.error('[API upload network error]:', error)
     throw new UploadError(
       'network',
       'The analysis service could not be reached. Check that the backend is running.',
@@ -124,7 +138,8 @@ export async function getReport(
 
   try {
     response = await fetch(url)
-  } catch {
+  } catch (error) {
+    console.error(`[API getReport network error for ${url}]:`, error)
     throw new UploadError(
       'network',
       'The saved report could not be reached. Check that the backend is running.',

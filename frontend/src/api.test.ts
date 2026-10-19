@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { API_BASE } from './config'
 import { upload, UploadError } from './api'
 
 const report = {
@@ -20,7 +21,7 @@ describe('upload API client', () => {
     vi.stubGlobal('fetch', fetchMock)
     const file = new File(['apk'], 'sample.apk', { type: 'application/vnd.android.package-archive' })
     await expect(upload(file, new AbortController().signal)).resolves.toMatchObject({ app: { packageName: 'org.test.app' } })
-    expect(fetchMock).toHaveBeenCalledWith('/api/upload', expect.objectContaining({ method: 'POST', body: expect.any(FormData) }))
+    expect(fetchMock).toHaveBeenCalledWith(`${API_BASE}/api/upload`, expect.objectContaining({ method: 'POST', body: expect.any(FormData) }))
     const requestBody = (fetchMock.mock.calls[0][1] as RequestInit).body
     expect(requestBody).toBeInstanceOf(FormData)
     if (!(requestBody instanceof FormData)) throw new Error('Expected a FormData request body.')
