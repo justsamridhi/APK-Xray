@@ -34,6 +34,19 @@ except ValueError:
 
 app = FastAPI(title="APK-Xray API", version="1.0")
 
+from fastapi.middleware.cors import CORSMiddleware
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "https://apk-xray.vercel.app",
+        "http://localhost:5173",   # local dev, adjust port if needed
+        "http://localhost:3000",
+    ],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def _error(status: int, message: str) -> JSONResponse:
     return JSONResponse(
