@@ -13,6 +13,7 @@ import { normalizeReport, type ReportData, type ReportFinding, type ReportLangua
 
 import { API_BASE } from './config'
 import { maxApkSize, upload, getReport, UploadError } from './api'
+import { UX4GLanguageSelector, InfographicDonut, InfographicPipelineSteps, InfographicFindingCard } from './components'
 
 import './styles.css'
 
@@ -264,8 +265,6 @@ function ReportContent({ report }: { report: ReportData }) {
   const [evidenceFinding, setEvidenceFinding] = useState<ReportFinding | null>(null)
   const [language, setLanguage] = useState<ReportLanguage>('en')
   const closeEvidence = useCallback(() => setEvidenceFinding(null), [])
-  const scoreTone = report.score.severity === 'high' || report.score.severity === 'very-high' ? 'warning' : report.score.severity === 'moderate' ? 'scan' : 'safe'
-  const scoreLabel = report.score.severity.replace('-', ' ').toUpperCase()
   const evidenceForFinding = (finding: ReportFinding) => setEvidenceFinding(finding)
 
   const download = () => {
@@ -279,14 +278,147 @@ function ReportContent({ report }: { report: ReportData }) {
     URL.revokeObjectURL(url)
   }
 
-  return <><div className="report-summary"><div><span className="eyebrow">ANALYSIS REPORT</span><h1 className="page-title">{report.app.name}</h1><p className="page-intro">{report.app.packageName} · version {report.app.version}</p>{report.ai && <p className="page-intro" role="status"><Badge tone={report.ai.status === 'verified' ? 'safe' : report.ai.status === 'error' ? 'warning' : 'schema'}>{report.ai.status === 'verified' ? 'AI VERIFIED' : report.ai.status === 'error' ? 'AI ERROR' : 'AI UNAVAILABLE'}</Badge> {report.ai.message}</p>}</div><div className="report-score"><span className="eyebrow">EXPOSURE SCORE</span><strong>{report.score.value}</strong><Badge tone={scoreTone}>{scoreLabel}</Badge><span className="score-label">{report.score.label}</span><button type="button" className="text-button" onClick={download}>Download report JSON</button></div></div>
-    <section className="report-section" aria-labelledby="breakdown-heading"><div className="section-heading"><div><span className="eyebrow">DETERMINISTIC SCORING</span><h2 id="breakdown-heading">Score breakdown</h2></div></div><Card className="breakdown-card"><table className="breakdown-table"><caption className="visually-hidden">Rule contributions to the backend-provided exposure score</caption><thead><tr><th scope="col">Rule</th><th scope="col">Contribution</th></tr></thead><tbody>{report.findings.filter((finding) => finding.points !== null).map((finding) => <tr key={finding.ruleId}><th scope="row">{finding.ruleId}</th><td>{finding.points} points</td></tr>)}</tbody></table>{report.findings.every((finding) => finding.points === null) && <p className="page-intro">The backend did not provide rule contributions for this report.</p>}</Card></section>
-    <section className="report-section" aria-labelledby="findings-heading"><div className="section-heading"><div><span className="eyebrow">FINDINGS</span><h2 id="findings-heading">{report.findings.length ? `${report.findings.length} results` : 'No findings'}</h2></div><div className="language-toggle" role="group" aria-label="Explanation language"><button type="button" className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}>English</button><button type="button" className={language === 'hi' ? 'selected' : ''} onClick={() => setLanguage('hi')}>हिन्दी</button></div></div>{report.findings.length ? <div className="finding-grid">{report.findings.map((finding) => <Card className="finding-card" key={finding.ruleId}><div className="finding-heading"><div><span className="eyebrow">{finding.ruleId}</span><h3>{finding.title}</h3></div><Badge tone={findingTone(finding.severity)}>{finding.severity.toUpperCase()}</Badge></div><p>{finding.summary}</p><p className="explanation">{finding.explanations[language] ?? finding.explanations.en ?? 'No explanation is available for this language.'}</p><div className="state-badges"><Badge tone={finding.claimStatus === 'verified' ? 'safe' : finding.claimStatus === 'removed' ? 'warning' : 'schema'}>{finding.claimStatus.toUpperCase()}</Badge></div><button className="text-button" type="button" onClick={() => evidenceForFinding(finding)}>View evidence</button></Card>)}</div> : <Card className="report-placeholder"><EmptyState title="No findings reported" description="The analysis completed without reportable findings." /></Card>}</section>
-    {report.capabilityChains.length > 0 && <section className="report-section" aria-labelledby="chains-heading"><div><span className="eyebrow">CAPABILITY CHAINS</span><h2 id="chains-heading">Evidence paths</h2></div><div className="chain-list">{report.capabilityChains.map((chain) => <Card className="chain-card" key={chain.id}><h3>{chain.id} · {chain.label}</h3><div className="chain">{chain.steps.map((step) => <button type="button" className="chain-step" key={step.id} onClick={() => { const finding = report.findings.find((candidate) => candidate.evidence.some((evidence) => evidence.id === step.evidenceId)); if (finding) evidenceForFinding(finding) }} disabled={!step.evidenceId}>{step.label}{step.evidenceId && <small>{step.evidenceId}</small>}</button>)}</div></Card>)}</div></section>}
-    <section className="report-section limitations" aria-labelledby="limitations-heading"><span className="eyebrow">LIMITATIONS</span><h2 id="limitations-heading">What this report cannot prove</h2><ul><li>Static declarations do not prove runtime behavior or how permissions are used.</li><li>A finding is not proof that an app is malware or unsafe.</li><li>The deterministic score is an exposure heuristic, not a security guarantee.</li></ul></section>
-    {evidenceFinding && <ReportEvidenceDrawer finding={evidenceFinding} onClose={closeEvidence} />}
-  </>
+  return (
+    <>
+      <div className="infographic-report-header">
+        <div className="infographic-summary-col">
+          <span className="eyebrow">ANALYSIS REPORT</span>
+          <h1 className="page-title">{report.app.name}</h1>
+          <p className="page-intro">{report.app.packageName} · version {report.app.version}</p>
+          {report.ai && (
+            <p className="page-intro" role="status">
+              <Badge tone={report.ai.status === 'verified' ? 'safe' : report.ai.status === 'error' ? 'warning' : 'schema'}>
+                {report.ai.status === 'verified' ? 'AI VERIFIED' : report.ai.status === 'error' ? 'AI ERROR' : 'AI UNAVAILABLE'}
+              </Badge>{' '}
+              {report.ai.message}
+            </p>
+          )}
+          <div className="infographic-summary-actions">
+            <button type="button" className="text-button" onClick={download}>
+              Download report JSON
+            </button>
+          </div>
+        </div>
+
+        <InfographicDonut
+          score={report.score.value}
+          severity={report.score.severity}
+          label={report.score.label}
+          findings={report.findings}
+        />
+      </div>
+
+      <InfographicPipelineSteps />
+
+      <section className="report-section" aria-labelledby="breakdown-heading">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">DETERMINISTIC SCORING</span>
+            <h2 id="breakdown-heading">Score breakdown</h2>
+          </div>
+        </div>
+        <Card className="breakdown-card">
+          <table className="breakdown-table">
+            <caption className="visually-hidden">Rule contributions to the backend-provided exposure score</caption>
+            <thead>
+              <tr>
+                <th scope="col">Rule</th>
+                <th scope="col">Contribution</th>
+              </tr>
+            </thead>
+            <tbody>
+              {report.findings.filter((finding) => finding.points !== null).map((finding) => (
+                <tr key={finding.ruleId}>
+                  <th scope="row">{finding.ruleId}</th>
+                  <td>{finding.points} points</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {report.findings.every((finding) => finding.points === null) && (
+            <p className="page-intro">The backend did not provide rule contributions for this report.</p>
+          )}
+        </Card>
+      </section>
+
+      <section className="report-section" aria-labelledby="findings-heading">
+        <div className="section-heading">
+          <div>
+            <span className="eyebrow">FINDINGS</span>
+            <h2 id="findings-heading">{report.findings.length ? `${report.findings.length} results` : 'No findings'}</h2>
+          </div>
+          <UX4GLanguageSelector currentLanguage={language} onLanguageChange={setLanguage} label="Explanation language" />
+        </div>
+
+        {report.findings.length ? (
+          <div className="infographic-findings-list">
+            {report.findings.map((finding, idx) => (
+              <InfographicFindingCard
+                key={finding.ruleId}
+                index={idx}
+                finding={finding}
+                language={language}
+                onEvidence={evidenceForFinding}
+              />
+            ))}
+          </div>
+        ) : (
+          <Card className="report-placeholder">
+            <EmptyState title="No findings reported" description="The analysis completed without reportable findings." />
+          </Card>
+        )}
+      </section>
+
+      {report.capabilityChains.length > 0 && (
+        <section className="report-section" aria-labelledby="chains-heading">
+          <div>
+            <span className="eyebrow">CAPABILITY CHAINS</span>
+            <h2 id="chains-heading">Evidence paths</h2>
+          </div>
+          <div className="chain-list">
+            {report.capabilityChains.map((chain) => (
+              <Card className="chain-card" key={chain.id}>
+                <h3>{chain.id} · {chain.label}</h3>
+                <div className="chain">
+                  {chain.steps.map((step) => (
+                    <button
+                      type="button"
+                      className="chain-step"
+                      key={step.id}
+                      onClick={() => {
+                        const finding = report.findings.find((candidate) =>
+                          candidate.evidence.some((evidence) => evidence.id === step.evidenceId)
+                        )
+                        if (finding) evidenceForFinding(finding)
+                      }}
+                      disabled={!step.evidenceId}
+                    >
+                      {step.label}
+                      {step.evidenceId && <small>{step.evidenceId}</small>}
+                    </button>
+                  ))}
+                </div>
+              </Card>
+            ))}
+          </div>
+        </section>
+      )}
+
+      <section className="report-section limitations" aria-labelledby="limitations-heading">
+        <span className="eyebrow">LIMITATIONS</span>
+        <h2 id="limitations-heading">What this report cannot prove</h2>
+        <ul>
+          <li>Static declarations do not prove runtime behavior or how permissions are used.</li>
+          <li>A finding is not proof that an app is malware or unsafe.</li>
+          <li>The deterministic score is an exposure heuristic, not a security guarantee.</li>
+        </ul>
+      </section>
+
+      {evidenceFinding && <ReportEvidenceDrawer finding={evidenceFinding} onClose={closeEvidence} />}
+    </>
+  )
 }
+
 
 function ReportPage({
   activeReport,
@@ -393,8 +525,36 @@ function ReportPage({
 }
 
 function FindingCard({ finding, onEvidence, evidenceLabel, severityLabel }: { finding: SampleFinding; onEvidence: (trigger: HTMLButtonElement) => void; evidenceLabel: string; severityLabel: string }) {
-  return <Card className="finding-card"><div className="finding-heading"><div><span className="eyebrow">{finding.ruleId}</span><h3>{finding.title}</h3></div><Badge tone={finding.severity === 'high' ? 'warning' : finding.severity === 'medium' ? 'scan' : 'safe'}>{severityLabel}</Badge></div><p>{finding.summary}</p><button className="text-button" type="button" onClick={(event) => onEvidence(event.currentTarget)}>{evidenceLabel}</button></Card>
+  const points = finding.severity === 'high' ? 35 : finding.severity === 'medium' ? 20 : 8
+  const progressRatio = points / 50
+
+  return (
+    <Card className="finding-card">
+      <div className="finding-heading">
+        <div>
+          <span className="eyebrow">{finding.ruleId}</span>
+          <h3>{finding.title}</h3>
+        </div>
+        <Badge tone={finding.severity === 'high' ? 'warning' : finding.severity === 'medium' ? 'scan' : 'safe'}>
+          {severityLabel}
+        </Badge>
+      </div>
+      <p>{finding.summary}</p>
+      <div className="infographic-progress-wrapper" aria-hidden="true">
+        <div className="infographic-bar-track">
+          <div
+            className={`infographic-bar-fill fill-${finding.severity}`}
+            style={{ width: `${Math.round(progressRatio * 100)}%` }}
+          />
+        </div>
+      </div>
+      <button className="text-button" type="button" onClick={(event) => onEvidence(event.currentTarget)}>
+        {evidenceLabel}
+      </button>
+    </Card>
+  )
 }
+
 
 function SampleReportPage() {
   const [language, setLanguage] = useState<'en' | 'hi'>('en')
@@ -515,7 +675,7 @@ function SampleReportPage() {
     <div className="sample-banner" role="alert"><Icon name="info" /> <strong>{copy.sampleBanner}</strong></div>
     <div className="sample-heading"><div><span className="eyebrow">{copy.reportType}</span><h1 className="page-title">Example Lantern</h1><p className="page-intro">{copy.intro}</p></div><button className="button button-secondary" type="button" onClick={download}>{copy.download}</button></div>
     <Card><div className="metadata-grid"><div><span className="eyebrow">{copy.package}</span><strong>{sampleReport.app.packageName}</strong></div><div><span className="eyebrow">{copy.version}</span><strong>{sampleReport.app.version}</strong></div><div><span className="eyebrow">{copy.minSdk}</span><strong>{sampleReport.app.minSdk}</strong></div><div><span className="eyebrow">{copy.exposure}</span><strong>{language === 'en' ? sampleReport.exposureLevel : 'उदाहरण: मध्यम'}</strong></div><div><span className="eyebrow">{copy.score}</span><strong>{sampleReport.score.value} · {language === 'en' ? sampleReport.score.label : 'उदाहरण स्कोर'}</strong></div></div><p className="demo-note">{language === 'en' ? sampleReport.score.breakdown : 'काल्पनिक मेनिफेस्ट साक्ष्य पर आधारित उदाहरण भार।'}</p></Card>
-    <section className="report-section"><div className="section-heading"><div><span className="eyebrow">{copy.findings}</span><h2>{copy.findingsTitle}</h2></div><div className="language-toggle" role="group" aria-label={copy.language}><button type="button" className={language === 'en' ? 'selected' : ''} onClick={() => setLanguage('en')}>English</button><button type="button" className={language === 'hi' ? 'selected' : ''} onClick={() => setLanguage('hi')}>हिन्दी</button></div></div><p className="page-intro">{copy.explanation}</p><div className="finding-grid">{localizedFindings.map((finding) => <FindingCard key={finding.ruleId} finding={finding} evidenceLabel={copy.viewEvidence} severityLabel={copy.severity[finding.severity]} onEvidence={(trigger) => { evidenceTriggerRef.current = trigger; setEvidence(finding) }} />)}</div></section>
+    <section className="report-section"><div className="section-heading"><div><span className="eyebrow">{copy.findings}</span><h2>{copy.findingsTitle}</h2></div><UX4GLanguageSelector currentLanguage={language} onLanguageChange={setLanguage} label={copy.language} /></div><p className="page-intro">{copy.explanation}</p><div className="finding-grid">{localizedFindings.map((finding) => <FindingCard key={finding.ruleId} finding={finding} evidenceLabel={copy.viewEvidence} severityLabel={copy.severity[finding.severity]} onEvidence={(trigger) => { evidenceTriggerRef.current = trigger; setEvidence(finding) }} />)}</div></section>
     <section className="report-section"><span className="eyebrow">{copy.chain}</span><h2>{copy.chainTitle}</h2><div className="chain">{sampleReport.capabilityChain.map((step, index) => <span key={step}>{index + 1}. {language === 'en' ? step : ['घोषित अनुमति', 'उदाहरण घटक', 'नियतात्मक नियम', 'साक्ष्य समीक्षा'][index]}</span>)}</div></section>
     <section className="report-section limitations"><span className="eyebrow">{copy.limitations}</span><h2>{copy.limitationsTitle}</h2><ul>{(language === 'en' ? sampleReport.limitations : ['यह फ़िक्चर काल्पनिक है और किसी वास्तविक ऐप का साक्ष्य नहीं है।', 'स्थैतिक विश्लेषण रनटाइम व्यवहार, उपयोगकर्ता के इरादे या क्षमता के उपयोग को साबित नहीं कर सकता।', 'स्कोर और एक्सपोज़र लेबल उदाहरण UI सामग्री हैं, सुरक्षा आकलन नहीं।']).map((item) => <li key={item}>{item}</li>)}</ul><div className="state-badges"><Badge tone="warning">{copy.notVerified}</Badge><Badge tone="schema">{copy.notRemoved}</Badge></div><p className="demo-note">{copy.statesNote}</p></section>
     {evidence && <div className="evidence-backdrop" role="presentation" onClick={closeEvidence}><aside ref={evidenceDrawerRef} className="evidence-drawer" role="dialog" aria-modal="true" aria-labelledby="evidence-title" onClick={(event) => event.stopPropagation()}><button className="drawer-close" type="button" aria-label={copy.closeEvidence} onClick={closeEvidence}><Icon name="close" /></button><span className="eyebrow">{copy.evidence}</span><h2 id="evidence-title">{evidence.ruleId}</h2><p>{evidence.evidence}</p><span className="demo-note">{copy.fixtureEvidence}</span></aside></div>}
